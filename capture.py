@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 
-from twisted.internet import reactor, protocol
+from twisted.internet import reactor, protocol, task
 from twisted.protocols import basic
 import subprocess
+import os
+import time
 
 # TODO MOve into a config file
 MPEG_PATH = "/mnt/raid/Recordings/.mpeg/"
@@ -20,12 +22,12 @@ class tuner:
 		self.stop_time = None
 		self.start_time = None
 		self.temp_name = None
-		if self.process.poll == None:
+		if self.process != None and self.process.poll() == None:
 			self.process.terminate()
-		self.process.wait()
+			self.process.wait()
 		self.process = None
 
-	def start(self,name,start_time,duration,channel):
+	def start(self,name,duration,channel):
 		# TODO Check if name already exists
 		
 		self.name = name
@@ -33,12 +35,12 @@ class tuner:
 		self.temp_name = self.name+".temp"
 		# TODO Convert duration to seconds if a string prefix
 		# so a string of "20m" ==> 20*60
-		self.stop_time = self.start_time + duration
+		self.stop_time = self.start_time + float(duration)
 		# Change Channel
 		subprocess.call(["hdhomerun_config",
 					self.id,
 					"set",
-					"/tuner%d/vchannel",
+					"/tuner%d/vchannel"%self.number,
 					channel])
 		# Start Capture and store the process object
 		self.process = subprocess.Popen([
@@ -76,7 +78,7 @@ class tuner:
 		return template.format(did=self.id,number=self.number,state=state)
 
 	def is_available(self):
-		if name == None:
+		if self.name == None:
 			return True
 		else:
 			return False
@@ -85,14 +87,16 @@ class tuner:
 	# did not die prematurely 
 	def check_up(self):
 		# If the tuner is idle, return
-		if name == None:
+		if self.is_available():
 			return True
 		# Check if the capture is done, stop and return
 		if time.time() > self.stop_time:
+			print ("Stopping Recording on Tuner %d"%(self.number))
 			self.stop()
 			return True
 		# If the capture is still ongoing, Return
 		if self.process.poll()==None:
+			print ("Recording on Tuner %d in progress"%(self.number)) 
 			return True
 		# If the catpure stopped unexptectedly, Print and error
 		else:
@@ -107,21 +111,25 @@ class Handler(basic.LineReceiver):
 	def lineReceived(self, cmd):
 		# TODO Switch to lowercase
 		# Separate by Whitespace
-		args = cmd.split()
+		args = cmd.decode("utf-8").split()
 		ret = ""
 		if args[0] == "status":
 			for t in self.factory.tuners:
 				ret += t.status_string()
-		if args[0] == "start":
+		elif args[0] == "start":
 			ret = self.start(args)
-		if args[0] == "stop":
+		elif args[0] == "stop":
 			ret = self.stop(args)
+		else:
+			print (repr(args[0]),repr("status"))
+			ret = "%s is not a valid command"%(args[0])
+			print (type(args[0]))
 
-		self.sendLine(ret)
+		self.sendLine(bytes(ret,"utf-8"))
 		#self.transport.loseConnection()
 	
 	# Looks for an available tuner and starts recording
-	def start(args):
+	def start(self,args):
 		for t in self.factory.tuners:
 			if t.is_available():
 				t.start(args[1],args[2],args[3])
@@ -131,7 +139,7 @@ class Handler(basic.LineReceiver):
 			return "No Tuners Available"
 
 	# Stop a recording early
-	def stop(args):
+	def stop(self,args):
 		if len(args) == 1:
 			return "No recording specified.  No recordings stopped"
 		
@@ -156,7 +164,7 @@ class Factory(protocol.ServerFactory):
 	
 	# Checkup on each tuner
 	def check_tuners(self):
-		for t in self.tuners()
+		for t in self.tuners:
 			t.check_up()
 	
 	# Register a Tuner with the class
@@ -166,12 +174,29 @@ class Factory(protocol.ServerFactory):
 	# TODO Auto Register tuners using the discovery command
 
 if __name__ == "__main__":
+
+	# Make sure a "capture" instance is not already running
+
+	# Initiate the factory
 	f = Factory()
-	f.register_tumer("id",0)
-	f.register_tumer("id",1)
-	f.register_tumer("id",2)
-	reactor.listenUNIX("/tmp/gdvr.capture",Factory())
-	reactor.Task("1 minute",f.check_tuners())
+	# Register the Tuners
+	f.register_tuner("1316BAD1",0)
+	f.register_tuner("1316BAD1",1)
+	f.register_tuner("1316BAD1",2)
+	# Open a Socket for communication
+	reactor.listenTCP(9172,f)
+
+	# Unix Sockets appear to be fucked for Py3.x.  Looking at the source,
+	# unix.py has not been touched in 3 years.  Guessing it's off the radar
+	# looks to be slightly harder than just doing a 2to3 convertion.
+	# TODO Try to make it work with Python3.  I dont want to use up all 
+	# the TCP ports with this
+	#reactor.listenUNIX("/tmp/gdvr.capture",f)
+
+	# Setup a task to check the tuners every 60 seconds
+	t = task.LoopingCall(f.check_tuners)
+	t.start(30)
+
 	reactor.run()
 
 
