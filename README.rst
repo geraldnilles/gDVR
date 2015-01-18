@@ -10,15 +10,18 @@ Motivation
 Right not, MythTV is the major linux PVR software.  However, the project is pretty large and it is not easy to separate the individual components.  I would like to make a DVR system that follows the Unix philosophy a little better.
 
 
+
 Base Components
 ===============
 
 In the beginning, i would like to set up a very basic set of components to form a DVR system.  Each component will be able to be run, tested, and upgraded separately.
 
+Additonaly, each components will be be event-driven and asyncronous.  Right now, i am using "twisted" to accomplish this.  It makes things a little more complicated, but giving everything a client-server interface makes it easy to decouple components. 
+
 Capturer
 -------
 
-This section simply records the video stream to the disk.  For the HDHomeRun Prime, it is an MPEG2 TS stream. A channel and duration will be provided and this program will save the stream.
+This section simply records the video stream to the disk.  For the HDHomeRun Prime, it is an MPEG2 TS stream. A channel and duration will be provided.  The program will select a tuner, change the channel, save the stream, and stop when the duration has expired.
 
 Scheduler
 ---------
