@@ -48,19 +48,23 @@ class tuner:
 					self.id,
 					"save",
 					str(self.number),
-					MPEG_PATH+self.temp_name
+					MPEG_PATH+self.temp_name,	
+					stdout = subprocess.DEVNULL,
+					stderr = subprocess.DEVNULL
 				])
 	
 	## Stops capturing and moves the file from temp location to the
 	# actual location
 	def stop(self):
-		# Send the terminate call
-		self.process.terminate()
-		# Wait for it to end
-		# TODO Add a Timeout afterwhich you try to "kill" it
-		self.process.wait()
-		# Move the temp_name to the actual name
-		os.rename(MPEG_PATH+self.temp_name,MPEG_PATH+self.name)
+		# Check if a process exists
+		if self.process != None:
+			# Send the terminate call
+			self.process.terminate()
+			# Wait for it to end
+			# TODO Add a Timeout afterwhich you try to "kill" it
+			self.process.wait()
+			# Move the temp_name to the actual name
+			os.rename(MPEG_PATH+self.temp_name,MPEG_PATH+self.name)
 		# Reset all the tuner variables
 		self.reset()
 
@@ -121,9 +125,7 @@ class Handler(basic.LineReceiver):
 		elif args[0] == "stop":
 			ret = self.stop(args)
 		else:
-			print (repr(args[0]),repr("status"))
 			ret = "%s is not a valid command"%(args[0])
-			print (type(args[0]))
 
 		self.sendLine(bytes(ret,"utf-8"))
 		#self.transport.loseConnection()
@@ -149,9 +151,10 @@ class Handler(basic.LineReceiver):
 			return "All Recordings Stopped"
 		else:
 			for t in self.factory.tuners:
-				if t.name == arg[1]:
+				if t.name == args[1]:
 					t.stop()
-			return "Recording stopped: %s",(args[1])
+					return "Recording stopped: %s"%(args[1])
+			return "Recording with that name not found"
 
 # Waits for Socket Connections and dispatches Handlers		
 class Factory(protocol.ServerFactory):	
