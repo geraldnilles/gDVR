@@ -59,3 +59,10 @@ Live TV w/ Time Warp
 --------------------
 
 Being able to rewind Live TV, watch behind, and catch up during commercials.  It gets a little hairy, but its a great feature to have. 
+
+Chromecast Support
+------------------
+
+Being able to sling video to a Chromecast or Rpi would be nice. 
+
+
