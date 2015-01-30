@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from twisted.internet import reactor
-from twisted.web.http import HTTPFactory, HTTPChannel
+from twisted.web.http import HTTPFactory, HTTPChannel, Request
 
 import os
 import subprocess
@@ -102,53 +102,49 @@ class Streamer:
 		# Uses the XBMC JSON-RPC API to start streaming on this device
 		pass
 
+class RequestHandler(Request):
+
+	def setByteHeader(self,a,b):
+		self.setHeader(bytes(a,"utf-8"),bytes(b,"utf-8"))
+	
+
+	def process(self):
+		self.setByteHeader("Content-Type","text/plain")
+		msg = "Unknown Command"
+
+		cmd = self.path.decode("utf-8")[1:].lower().split("/")
+		self.cmd = cmd[1:]
+	
+
+		msg = "OK"
+	
+		self.write(bytes(msg,"utf-8"))
+
+		self.finish()
+
+
 class Handler(HTTPChannel):
-	def __init__(self):
-		super(Handler,self).__init__()
+	requestFactory = RequestHandler
 
-		self.path = None
+	def requestDone(self,req):
 
-	def allContentReceived(self):
-		msg = "Unknown Path"
+		print (req.cmd)
 
-		cmd = self.path[1:].lower().split("/")
-		print (cmd)
-		if cmd[1] == "watch":
-			if len(cmd) == 3:
-				self.factory.streamer.watch_channel(cmd[2])
+		cmd = req.cmd
+
+		if cmd[0] == "watch":
+			if len(cmd) == 2:
+				self.factory.streamer.watch_channel(cmd[1])
 				msg = "OK"
 
-		if cmd[1] == "stop":
+		if cmd[0] == "stop":
 			self.factory.streamer.stop()
 			msg = "OK"
 
-		if cmd[1] == "sling":
-			self.factory.streamer.sling_to_xbmc(cmd[2])
+		if cmd[0] == "sling":
+			self.factory.streamer.sling_to_xbmc(cmd[1])
 			msg = "OK"
-			
 
-		out = self.generate_response(msg)
-
-		self.sendLine(bytes(out,"utf-8"))
-		self.transport.loseConnection()
-
-	def generate_response(self,msg):
-		out = "Content-Length: "+str(len(msg))+"\n\r"
-		out += "Content-Type: text/plain\n\r"
-		out += "\n\r"
-		out += msg
-		return out
-
-	def lineReceived(self,line):	
-		super(Handler,self).lineReceived(line)
-		l = line.decode("utf-8")
-		if len(l) <3: 
-			return
-
-		l = l.split()
-
-		if self.path == None and l[0] == "GET":
-			self.path = l[1]
 
 class Factory(HTTPFactory):
 	protocol = Handler
