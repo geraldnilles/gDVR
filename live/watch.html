@@ -1,0 +1,78 @@
+<html>
+<head>
+
+<script>
+
+var uid = "";
+
+function get_status(){
+	// Reads the status of the stream
+	// Will either return idle, preparing, or ready
+	// Idle means the tuner aint doing shit
+	// Preparing means the tuner has started, but is not ready to stream
+	// Ready means the stream is ready to roll
+	var s = sync_get("/streamer/status")
+
+	
+
+	return s
+}
+
+// Changes the channel and starts the streamer
+function change_channel(channel){
+	var ret = sync_get("/streamer/set/"+channel)	
+}
+
+// Stops the streamer
+function stop(){
+	var ret = sync_get("/streamer/stop")
+}
+
+// Checks if the tuner is free 
+function check_control(){
+	var ret = sync_get("/streamer/control/"+uid)
+	if (ret == "busy"){
+		return "Tuner is in use";
+	} else {
+		uid = ret;
+	}
+}
+
+
+// This function will be called every 5 seconds when the page is open
+function wait_to_play(){
+	var s = get_status();
+	if (s=="ready"){
+		// Start Playing Video
+	}else{
+		// Print "Tuner is 's'" somewhere on the page	
+	}
+}
+
+</script>
+
+</head>
+<body>
+
+	<h2>Live TV!</h2>
+
+	<div>
+		The Tuner is available.  Click Here to take control
+	</div>
+
+	<div>
+		Choose a channel to watch
+	<select>
+		<option value="681">ESPN</option>
+		<option value="111">FX</option>
+		<option value="123">E!</option>
+	</select>
+	</div>
+
+
+	<video controls src="/live/out.m3u8"></video>
+
+</body>
+
+</html>
+
