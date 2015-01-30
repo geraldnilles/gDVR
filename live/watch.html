@@ -20,22 +20,12 @@ function get_status(){
 
 // Changes the channel and starts the streamer
 function change_channel(channel){
-	var ret = sync_get("/streamer/set/"+channel)	
+	var ret = sync_get("/streamer/watch/"+channel)	
 }
 
 // Stops the streamer
 function stop(){
 	var ret = sync_get("/streamer/stop")
-}
-
-// Checks if the tuner is free 
-function check_control(){
-	var ret = sync_get("/streamer/control/"+uid)
-	if (ret == "busy"){
-		return "Tuner is in use";
-	} else {
-		uid = ret;
-	}
 }
 
 
