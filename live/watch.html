@@ -4,6 +4,7 @@
 <script>
 
 var uid = "";
+var status_id = 0;
 
 function get_status(){
 	// Reads the status of the stream
@@ -20,20 +21,33 @@ function get_status(){
 
 // Changes the channel and starts the streamer
 function change_channel(channel){
-	var ret = sync_get("/streamer/watch/"+channel)	
+	// Stop Video Player
+	var ret = sync_get("/streamer/watch/"+channel)
+
+	// Start Status Loop with 2s interval
+	status_id = setInterval(status_loop,2000);
 }
 
 // Stops the streamer
 function stop(){
 	var ret = sync_get("/streamer/stop")
+	// Stop The Status Loop
+	clearInterval(status_is);
 }
 
 
-// This function will be called every 5 seconds when the page is open
-function wait_to_play(){
+// Status Loop
+//
+// This function will regularly poll the status of the streamer at a regular
+// interval.  If ready
+function status_loop(){
 	var s = get_status();
 	if (s=="ready"){
+		// If already Playing, do nothing
 		// Start Playing Video
+		// Reduce Status Interval to 10s
+		clearInterval(status_id);
+		status_id = setInterval(status_loop,10000)
 	}else{
 		// Print "Tuner is 's'" somewhere on the page	
 	}

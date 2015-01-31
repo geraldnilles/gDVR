@@ -112,11 +112,24 @@ class RequestHandler(Request):
 		self.setByteHeader("Content-Type","text/plain")
 		msg = "Unknown Command"
 
-		cmd = self.path.decode("utf-8")[1:].lower().split("/")
-		self.cmd = cmd[1:]
+		cmd = self.path.decode("utf-8")[1:].lower().split("/")[1:]
 	
+		if cmd[0] == "watch":
+			if len(cmd) == 2:
+				self.channel.factory.streamer.watch_channel(cmd[1])
+				msg = "OK"
 
-		msg = "OK"
+		if cmd[0] == "stop":
+			self.channel.factory.streamer.stop()
+			msg = "OK"
+
+		if cmd[0] == "status":
+			msg = self.channel.factory.streamer.status()
+
+		if cmd[0] == "sling":
+			self.channel.factory.streamer.sling_to_xbmc(cmd[1])
+			msg = "OK"
+
 	
 		self.write(bytes(msg,"utf-8"))
 
@@ -126,24 +139,6 @@ class RequestHandler(Request):
 class Handler(HTTPChannel):
 	requestFactory = RequestHandler
 
-	def requestDone(self,req):
-
-		print (req.cmd)
-
-		cmd = req.cmd
-
-		if cmd[0] == "watch":
-			if len(cmd) == 2:
-				self.factory.streamer.watch_channel(cmd[1])
-				msg = "OK"
-
-		if cmd[0] == "stop":
-			self.factory.streamer.stop()
-			msg = "OK"
-
-		if cmd[0] == "sling":
-			self.factory.streamer.sling_to_xbmc(cmd[1])
-			msg = "OK"
 
 
 class Factory(HTTPFactory):
