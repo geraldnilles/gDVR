@@ -21,6 +21,7 @@ class Streamer:
 		self.stop()
 		self.change(chan)
 		self.start()
+		print("Starting to Stream "+str(chan))
 
 	# Clean up the chunk data directory
 	def wipe(self):
@@ -32,6 +33,7 @@ class Streamer:
 	def stop(self):
 		# Stop the recording and wait for it to finish
 		if self.proc_cap != None:
+			print ("Stopping the current Stream")
 			self.proc_cap.terminate()
 			self.proc_cap.wait()
 		if self.proc_stm != None:
@@ -157,6 +159,6 @@ if __name__ == "__main__":
 	f = Factory()
 	
 	reactor.listenTCP(9177,f)
-
+	print ("gDVR Live Streamer Started")
 	reactor.run()
 
