@@ -8,73 +8,80 @@
 var uid = "";
 var status_id = 0;
 
-function sync_get(x){
-	return $.get(x);
-}
-
-function get_status(){
-	// Reads the status of the stream
-	// Will either return idle, preparing, or ready
-	// Idle means the tuner aint doing shit
-	// Preparing means the tuner has started, but is not ready to stream
-	// Ready means the stream is ready to roll
-	var s = sync_get("/streamer/status");
-
-	return s;
-}
-
 // Changes the channel and starts the streamer
-function change_channel(channel){
+function change_channel(e){
+
+	display_status("Changing Status to "+e.target.value);
 	// Stop Video Player
-	var ret = sync_get("/streamer/watch/"+channel);
+	$.get("/streamer/watch/"+e.target.value);
 
 	// Start Status Loop with 2s interval
-	status_id = setInterval(status_loop,2000);
+	status_id = setInterval(status_get,2000);
 }
 
 // Stops the streamer
 function stop(){
-	var ret = sync_get("/streamer/stop");
+	$.get("/streamer/stop");
 	// Stop The Status Loop
-	clearInterval(status_is);
-	status_id = setInterval(status_loop,10000);
+	clearInterval(status_id);
+	status_id = setInterval(status_get,10000);
+	display_status("Stopping Live Stream");
 }
 
-
-// Status Loop
+// Status GET
 //
-// This function will regularly poll the status of the streamer at a regular
-// interval.  If ready
-function status_loop(){
-	var s = get_status();
+// Requests Status info from the server
+function status_get(){
+	$.get("/streamer/status",function(data){
+		status_do(data);
+	});
+}
+
+// Status DO
+// 
+// Updates the page once the status is received.
+function status_do(s){
 	if (s=="ready"){
 		// Start the video is it is not started already
 		var video = document.getElementsByTagName("video")[0];
 		if(video.paused == true){
-			video.pasued = false;
+			display_status("Loading Video");
+			video.load();
+			video.onload = function (){
+				video.play();
+				display_status("Starting Player");
+			} 
 		}
 		// Reduce Status Interval to 10s
 		clearInterval(status_id);
-		status_id = setInterval(status_loop,10000);
+		status_id = setInterval(status_get,10000);
+		display_status(s);
 	}else{
 		// Print "Tuner is 's'" somewhere on the page	
-		display_status(s)
+		display_status(s);
 	}
 }
 
 function display_status(s){
 	var sts = document.getElementById("status");
 	sts.innerHTML = s;
+
+	$("#history").prepend("<p>"+s+"</p>");
 }
 
-function ready(){
-	status_id = setInterval(status_loop,10000);
-}
+$(document).ready(function(){
+	status_id = setInterval(status_get,10000);
+
+	$("#stop").on("click",stop);
+
+	$("#channel").on("change",change_channel);
+
+});
 
 </script>
 
 </head>
-<body onload="ready();" >
+<body >
 
 	<h2>Live TV!</h2>
 
@@ -84,14 +91,19 @@ function ready(){
 
 	<div>
 		Choose a channel to watch
-	<select>
+	<select id="channel">
+		<option value="681">Select a Channel</option>
 		<option value="681">ESPN</option>
 		<option value="111">FX</option>
-		<option value="123">E!</option>
+		<option value="115">E!</option>
 	</select>
+	<button id="stop">STOP</button>
 	</div>
 
 	<video controls src="/live/out.m3u8"></video>
+
+	<div id="history">
+	</div>
 
 </body>
 

@@ -1,0 +1,10 @@
+[Unit]
+Description=Start the Live TV Streamer 
+
+[Service]
+User=gdvr
+Type=simple
+ExecStart=/mnt/raid/Code/gDVR/live/streamer.py
+# Restart=Always
+
+
