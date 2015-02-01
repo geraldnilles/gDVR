@@ -15,7 +15,7 @@ class Remote:
 		# Internal Path to Media Folder 
 		self.local_root = "/mnt/raid/"
 		# NFS Path to Media Folder
-		self.remote_root = "nfs://192.168.0.200/media/"
+		self.remote_root = "nfs://192.168.0.200/srv/nfs4/media/"
 
 	# Look for all Kodi devices in the network.
 	def discover(self):
@@ -41,6 +41,12 @@ class Remote:
 	# Play Device
 	def play(self,ip):
 		pass
+
+	def start(self,ip,path):
+		req = self.create_json_obj()
+		req["method"] = "Player.Open"
+		req["params"] = {"item":self.remote_root+"Movies/Features/Battleship.mkv"}
+		return self.http(ip,req)
 
 	# Pause Device
 	def pause(self,ip):
@@ -143,5 +149,6 @@ if __name__ == "__main__":
 	r = Remote()
 	print(r.get_status("FamilyRoom"))
 	print(r.get_playlist_items("FamilyRoom"))
+	print(r.start("FamilyRoom","OK"))
 
 
