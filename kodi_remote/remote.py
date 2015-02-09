@@ -1,154 +1,121 @@
 #!/usr/bin/env python
 
-from twisted.internet import reactor
-from twisted.web.http import HTTPFactory, HTTPChannel, Request
+from twisted.internet import reactor, protocol, task
+from twisted.protocols import basic
+import json_protocol
 
-import os, json
-import http.client
+# Handles Socket Requests
+class Handler(basic.LineReceiver):
+	def lineReceived(self, cmd):
+		# TODO Switch to lowercase
+		# Separate by Whitespace
+		args = cmd.decode("utf-8").split()
+		ret = ""
+		# Connect to the provided IP or all IPs
+		if args[0] == "connect":
+			ret = self.connect(args)
+		# Search for media that matches the provided string
+		elif args[0] == "search":
+			pass
+		elif args[0] == "play":
+			pass
+		elif args[0] == "status":
+			pass
+		# List all connected devices
+		elif args[0] == "devices":
+			ret = self.factory.kodi_list_devices()
+		elif args[0] == "":
+			pass
+		else:
+			ret = "%s is not a valid command"%(args[0])
 
-class Remote:
+		self.sendLine(bytes(ret,"utf-8"))
 	
-	def __init__(self):
-		self.devices = []
-		self.hostnames = ["FamilyRoom","BedroomMedia"]
+	def connect(self,args):
+		ips = []
+		if len(args) == 1:
+			ips = self.factory.kodi_ip_list
+		if len(args) > 1:
+			ips = args[1:]
 
-		# Internal Path to Media Folder 
-		self.local_root = "/mnt/raid/"
-		# NFS Path to Media Folder
-		self.remote_root = "nfs://192.168.0.200/srv/nfs4/media/"
+		if len(ips) == 0:
+			return "Nothing to connect"
+		out = "Connecting to ..."
+		for ip in ips:
+			# TODO See if a connection is already present
+			# Connect if not
+			reactor.connectTCP(ip,9090,
+				self.factory.kodi_factory)
+			out += "\n"+ip
+		return out
 
-	# Look for all Kodi devices in the network.
-	def discover(self):
-		self.devices = []
-		for h in self.hostnames:
-			# Check if device is powered on
-			try:
-				self.get_status(h)
-				self.devices.append(h)
-			except:
-				pass
-	
-	def create_json_obj(self):
-		return {
-			"jsonrpc":"2.0",
-			"id":1
-			}
+class KodiFactory(json_protocol.Factory):
+	def buildProtocol(self,addr):
+		#
+		print ("Connecting to ",addr)
+		#
+		self.resetDelay()
+		# Generate a Protocol Instance
+		p = json_protocol.Protocol()
+		# Reference the protocol back to this factory
+		p.factory = self
+		# Register the protocol with the Main factory
+		self.factory.kodi_register(p)
+		return p
 
-	# Add Item to Playlist
-	def add_to_playlist(self,ip,path):
-		pass
-
-	# Play Device
-	def play(self,ip):
-		pass
-
-	def start(self,ip,path):
-		req = self.create_json_obj()
-		req["method"] = "Player.Open"
-		req["params"] = {"item":self.remote_root+"Movies/Features/Battleship.mkv"}
-		return self.http(ip,req)
-
-	# Pause Device
-	def pause(self,ip):
-		pass
-
-	# Stop Device 
-	def stop(self,ip):
-		pass
-
-	def get_playlist(self,ip):
-		pass
-
-	def get_status(self,ip):
-		req = self.create_json_obj()
-		req["method"] = "Player.GetActivePlayers"
-		return self.http(ip,req)
-
-	def get_playlistid(self,ip):
-		req = self.create_json_obj()
-		req["method"] = "Playlist.GetPlaylists"
-		resp = self.http(ip,req)
-		for p in resp["result"]:
-			if p["type"] == "video":
-				return p["playlistid"]
-		return None
-
-	def get_playlist_items(self,ip):
-		pid = self.get_playlistid(ip)
-		req = self.create_json_obj()
-		req["method"] = "Playlist.GetItems"
-		req["params"] = {"playlistid": pid}
-		return self.http(ip,req)
-
-	# Send and Recive JSON over HTTP
-	def http(self,ip,msg):
-		headers = {"Content-Type":"application/json"}
-		conn = http.client.HTTPConnection(ip,timeout=2)
-		conn.request("POST","/jsonrpc",json.dumps(msg),headers)
-		resp = conn.getresponse()
-		data = resp.read()
-		conn.close()
-		return json.loads(data.decode("utf-8"))
-
-class RequestHandler(Request):
-
-	def setByteHeader(self,a,b):
-		self.setHeader(bytes(a,"utf-8"),bytes(b,"utf-8"))
-	
-
-	def process(self):
-		self.setByteHeader("Content-Type","text/plain")
-		msg = "Unknown Command"
-
-		cmd = self.path.decode("utf-8")[1:].lower().split("/")[1:]
-	
-		if cmd[0] == "watch":
-			if len(cmd) == 2:
-				self.channel.factory.streamer.watch_channel(cmd[1])
-				msg = "OK"
-
-		if cmd[0] == "stop":
-			self.channel.factory.streamer.stop()
-			msg = "OK"
-
-		if cmd[0] == "status":
-			msg = self.channel.factory.streamer.status()
-
-		if cmd[0] == "sling":
-			self.channel.factory.streamer.sling_to_xbmc(cmd[1])
-			msg = "OK"
-
-	
-		self.write(bytes(msg,"utf-8"))
-
-		self.finish()
-
-
-class Handler(HTTPChannel):
-	requestFactory = RequestHandler
-
-
-
-class Factory(HTTPFactory):
+# Waits for Socket Connections and dispatches Handlers		
+class Factory(protocol.ServerFactory):	
+	# Specify the class that will handle new connections
 	protocol = Handler
 
 	def __init__(self):
-		super(Factory,self).__init__()
-		self.remote = Remote()
+		print("Creating Telnet Factory")
+		# Create a JSON factory
+		self.kodi_factory = KodiFactory()
+		# Add this Factory to the JSON factory so changes can
+		# be communicated
+		self.kodi_factory.factory = self
+		# A list of All Kodi Protocols
+		self.kodi_protocol_list = [] 
+		# A list of Active Kodi Protocols
+		self.active_kodi_protocol_list = []
+		# A list of all IPs/Hostnames to try to connect to
+		self.kodi_ip_list = ["FamilyRoom","BedroomMedia"]
+		
+	def kodi_started(self,protocol):
+		print("Connection Started")
+		if protocol not in self.active_kodi_protocol_list:
+			self.active_kodi_protocol_list.append(protocol)
+
+	def kodi_stopped(self,protocol):
+		print("Connection Stopped")
+		if protocol in self.active_kodi_protocol_list:
+			self.active_kodi_protocol_list.remove(protocol)
+
+	def kodi_list_devices(self):
+		out = "Connected Kodi Devices:\n"
+		for d in self.active_kodi_protocol_list:
+			out += str(d.transport.getPeer())
+		return out
+			
+
+	# Register a protocol with this main factory 
+	def kodi_register(self,protocol):
+		print ("Registering Protocol")
+		if protocol not in self.kodi_protocol_list:
+			self.kodi_protocol_list.append(protocol)
+			protocol.stop_callback = self.kodi_stopped
+			protocol.start_callback = self.kodi_started
+
 
 if __name__ == "__main__":
 
-	"""
-	f = Factory()
-	
-	reactor.listenTCP(9178,f)
-	print ("gDVR Kodi Remote Started")
-	reactor.run()
-	"""
 
-	r = Remote()
-	print(r.get_status("FamilyRoom"))
-	print(r.get_playlist_items("FamilyRoom"))
-	print(r.start("FamilyRoom","OK"))
+	# Initiate the factory
+	f = Factory()
+	# Open a Socket for communication
+	reactor.listenTCP(9175,f)
+
+	reactor.run()
 
 
