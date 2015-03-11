@@ -10,10 +10,10 @@ class Protocol(protocol.Protocol):
 		self.inbox = []
 		self.stop_callback = None
 		self.start_callback = None
+		self.msg_callback = None
 
 	def dataReceived(self,data):
 		self.buffer += data.decode("utf-8")
-		print(self.buffer)
 		self._parseBuffer()
 
 		while(len(self.inbox) > 0):
@@ -37,7 +37,6 @@ class Protocol(protocol.Protocol):
 			start = border_indices[i]+1
 			stop = border_indices[i+1]+1
 			json_str = self.buffer[start:stop]
-			print("Decoding",json_str)
 			self.inbox.append(json.loads(json_str))
 
 		# Chop off rest of buffer
@@ -45,13 +44,20 @@ class Protocol(protocol.Protocol):
 	
 	def messageReceived(self,msg):
 		# To be Overwitten with Recieved Message
-		print(msg)
+		if self.msg_callback == None:
+			# Do Nothing
+			return
+
+		# Call the callback, and set the next call back based on the 
+		# return value.  If the callback returns None, then we revert
+		# to the "Do Nothhing" callback
+		self.msg_callback = self.msg_callback(msg)
+		
 
 	def sendMessage(self,msg):
 		self.transport.write(bytes(json.dumps(msg),"utf-8"))
 
 	def connectionMade(self):
-		print ("Connection Made!")
 		self.sendMessage({
 				"jsonrpc":"2.0",
 				"id":1,
@@ -67,7 +73,6 @@ class Protocol(protocol.Protocol):
 		#self.remote_root = "nfs://192.168.0.200/srv/nfs4/media/"
 
 	def connectionLost(self,reason):
-		print("Connection Lost!")
 		if (self.stop_callback!= None):
 			# Run the Stop Callback
 			self.stop_callback(self)
@@ -84,7 +89,6 @@ class Factory(protocol.ReconnectingClientFactory):
 	factor = 2
 
 	def buildProtocol(self,addr):
-		print("Connecting to",addr)
 		self.resetDelay()
 		p = self.protocol()
 		p.factory = self
