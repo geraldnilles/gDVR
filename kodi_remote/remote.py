@@ -20,8 +20,21 @@ class Handler(basic.LineReceiver):
 		# Search for media that matches the provided string
 		elif args[0] == "search":
 			pass
-		elif args[0] == "play":
-			pass
+		elif args[0] in ["play","pause"]:
+			# If no IP provided, select the first one on the list
+			if(len(args) == 1):
+				if len(self.factory.active_kodi_protocol_list) == 0:
+					ip = None
+				else:
+					ip = self.factory.active_kodi_protocol_list[0]
+			else:
+				ip = self.ip_to_protocol(args[1])
+
+			if ip == None:
+				ret = "Provide IP not connected"
+			else:
+				ret = self.play(ip)
+			
 		elif args[0] == "listen":
 			if(len(args) == 1):
 				ips = self.factory.active_kodi_protocol_list
@@ -55,6 +68,23 @@ class Handler(basic.LineReceiver):
 		# List all connected devices
 		elif args[0] == "devices":
 			ret = self.factory.kodi_list_devices()
+
+		elif args[0] in ["load","open"]:
+			# TODO Create a function to handle ip-based arguments
+			# If no IP provided, select the first one on the list
+			if(len(args) == 1):
+				if len(self.factory.active_kodi_protocol_list) == 0:
+					ip = None
+				else:
+					ip = self.factory.active_kodi_protocol_list[0]
+			else:
+				ip = self.ip_to_protocol(args[1])
+
+			if ip == None:
+				ret = "Provide IP not connected"
+			else:
+				ret = self.load(ip)
+			
 
 		elif args[0] == "":
 			pass
@@ -102,7 +132,39 @@ class Handler(basic.LineReceiver):
 		else:
 			ret = "Playing: "+str(msg["result"])
 		self.send_string(ret)
+
+	def play(self,p):
+		msg = self.create_base_msg()
+		msg["method"] = "Player.PlayPause"
+		msg["params"] = {
+					"playerid":1
+				}
+
+		# We dont really care about any call back for this
+		#p.msg_callback = self.string_callback
+		p.sendMessage(msg)
+		self.send_string("PlayPause Toggled")
+
 		
+	def load(self,p):
+		msg = self.create_base_msg()
+		msg["method"] = "Player.Open"
+		msg["params"] = {"item": {
+						"file":"nfs://192.168.0.200/srv/nfs4/media/Movies/Features/Lucy.mkv"
+					}
+				}
+ 
+		"""
+				{
+					"item":"nfs://192.168.0.200/srv/nfs4/media/Movies/Features/Lucy.mkv"
+				}
+		"""
+
+		# We dont really care about any call back for this
+		p.msg_callback = self.string_callback
+		p.sendMessage(msg)
+		self.send_string("Video Opened")
+
 
 	def string_callback(self,msg):
 
