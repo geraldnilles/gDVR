@@ -8,6 +8,17 @@ import json
 # Handles Socket Requests
 class Handler(basic.LineReceiver):
 
+	def get_ip(self,args):
+		# If no IP provided, select the first one on the list
+		if(len(args) == 1):
+			if len(self.factory.active_kodi_protocol_list) == 0:
+				ip = None
+			else:
+				ip = self.factory.active_kodi_protocol_list[0]
+		else:
+			ip = self.ip_to_protocol(args[1])
+
+		return ip
 
 	def lineReceived(self, cmd):
 		# TODO Switch to lowercase
@@ -21,20 +32,33 @@ class Handler(basic.LineReceiver):
 		elif args[0] == "search":
 			pass
 		elif args[0] in ["play","pause"]:
-			# If no IP provided, select the first one on the list
-			if(len(args) == 1):
-				if len(self.factory.active_kodi_protocol_list) == 0:
-					ip = None
-				else:
-					ip = self.factory.active_kodi_protocol_list[0]
-			else:
-				ip = self.ip_to_protocol(args[1])
+
+			ip = self.get_ip(args)
 
 			if ip == None:
 				ret = "Provide IP not connected"
 			else:
 				ret = self.play(ip)
 			
+		elif args[0] in ["stop"]:
+
+			ip = self.get_ip(args)
+
+			if ip == None:
+				ret = "Provide IP not connected"
+			else:
+				ret = self.stop(ip)
+			
+		elif args[0] in ["seek"]:
+
+			ip = self.get_ip(args)
+
+			if ip == None:
+				ret = "Provide IP not connected"
+			else:
+				if len(args) >= 3:
+					ret = self.seek(ip,args[2])
+
 		elif args[0] == "listen":
 			if(len(args) == 1):
 				ips = self.factory.active_kodi_protocol_list
@@ -50,14 +74,7 @@ class Handler(basic.LineReceiver):
 				ip.msg_callback = self.string_callback
 					
 		elif args[0] == "status":
-			# If no IP provided, select the first one on the list
-			if(len(args) == 1):
-				if len(self.factory.active_kodi_protocol_list) == 0:
-					ip = None
-				else:
-					ip = self.factory.active_kodi_protocol_list[0]
-			else:
-				ip = self.ip_to_protocol(args[1])
+			ip = self.get_ip(args)
 
 			if ip == None:
 				ret = "Provide IP not connected"
@@ -70,15 +87,8 @@ class Handler(basic.LineReceiver):
 			ret = self.factory.kodi_list_devices()
 
 		elif args[0] in ["load","open"]:
-			# TODO Create a function to handle ip-based arguments
-			# If no IP provided, select the first one on the list
-			if(len(args) == 1):
-				if len(self.factory.active_kodi_protocol_list) == 0:
-					ip = None
-				else:
-					ip = self.factory.active_kodi_protocol_list[0]
-			else:
-				ip = self.ip_to_protocol(args[1])
+
+			ip = self.get_ip(args)
 
 			if ip == None:
 				ret = "Provide IP not connected"
@@ -145,6 +155,30 @@ class Handler(basic.LineReceiver):
 		p.sendMessage(msg)
 		self.send_string("PlayPause Toggled")
 
+	def stop(self,p):
+		msg = self.create_base_msg()
+		msg["method"] = "Player.Stop"
+		msg["params"] = {
+					"playerid":1
+				}
+
+		# We dont really care about any call back for this
+		#p.msg_callback = self.string_callback
+		p.sendMessage(msg)
+		self.send_string("Stopped")
+
+	def seek(self,p,percent):
+		msg = self.create_base_msg()
+		msg["method"] = "Player.Stop"
+		msg["params"] = {
+					"playerid":1,
+					"value":float(percent)
+				}
+
+		# We dont really care about any call back for this
+		#p.msg_callback = self.string_callback
+		p.sendMessage(msg)
+		self.send_string("Seek to "+str(percent))
 		
 	def load(self,p):
 		msg = self.create_base_msg()
@@ -154,11 +188,6 @@ class Handler(basic.LineReceiver):
 					}
 				}
  
-		"""
-				{
-					"item":"nfs://192.168.0.200/srv/nfs4/media/Movies/Features/Lucy.mkv"
-				}
-		"""
 
 		# We dont really care about any call back for this
 		p.msg_callback = self.string_callback
