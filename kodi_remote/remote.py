@@ -169,7 +169,7 @@ class Handler(basic.LineReceiver):
 
 	def seek(self,p,percent):
 		msg = self.create_base_msg()
-		msg["method"] = "Player.Stop"
+		msg["method"] = "Player.Seek"
 		msg["params"] = {
 					"playerid":1,
 					"value":float(percent)
