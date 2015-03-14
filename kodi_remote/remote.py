@@ -5,6 +5,7 @@ from twisted.protocols import basic
 import json_protocol
 import json
 import os
+import shlex
 
 # Handles Socket Requests
 class Handler(basic.LineReceiver):
@@ -25,7 +26,7 @@ class Handler(basic.LineReceiver):
 		# TODO Switch to lowercase
 		# TODO User Arg Parser to clean this up
 		# Separate by Whitespace
-		args = cmd.decode("utf-8").split()
+		args = shlex.split(cmd.decode("utf-8"))
 		ret = ""
 		# Connect to the provided IP or all IPs
 		if args[0] == "connect":
