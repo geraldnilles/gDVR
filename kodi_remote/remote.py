@@ -6,120 +6,85 @@ import json_protocol
 import json
 import os
 import shlex
+import argparse
+
 
 # Handles Socket Requests
 class Handler(basic.LineReceiver):
-
-	def get_ip(self,args):
-		# If no IP provided, select the first one on the list
-		if(len(args) == 1):
-			if len(self.factory.active_kodi_protocol_list) == 0:
-				ip = None
-			else:
-				ip = self.factory.active_kodi_protocol_list[0]
-		else:
-			ip = self.ip_to_protocol(args[1])
-
-		return ip
 
 	def lineReceived(self, cmd):
 		# TODO Switch to lowercase
 		# TODO User Arg Parser to clean this up
 		# Separate by Whitespace
 		args = shlex.split(cmd.decode("utf-8"))
+
+		parser = argparse.ArgumentParser()
+		parser.add_argument("-p","--play","--pause",
+				action="store_true")	
+		parser.add_argument("-i","--ip", metavar="address")
+		parser.add_argument("-c","--connect", action="store_true")
+		parser.add_argument("-s","--search", metavar="query")
+		parser.add_argument("-k","--seek", metavar="percent")
+		parser.add_argument("-t","--stop", action="store_true")
+		parser.add_argument("-l","--listen", action="store_true")
+		parser.add_argument("-a","--status", action="store_true")
+		parser.add_argument("-d","--devices", action="store_true")
+		parser.add_argument("-o","--open","--load", 
+				metavar="query")
+		
+		try:
+			pargs = parser.parse_args(args)
+		except:	
+			ret = parser.format_help()
+			self.send_string(ret)
+			return
+
 		ret = ""
 		# Connect to the provided IP or all IPs
-		if args[0] == "connect":
-			ret = self.connect(args)
+		if pargs.connect:
+			ret = self.connect(pargs)
 		# Search for media that matches the provided string
-		elif args[0] == "search":
-			if len(args) == 1:
-				q = ""
-			else:
-				q = args[1]
-			ret = self.search(q)
-		elif args[0] in ["play","pause"]:
-
-			ip = self.get_ip(args)
-
-			if ip == None:
-				ret = "Provide IP not connected"
-			else:
-				ret = self.play(ip)
+		elif pargs.search:
+			ret = self.search(pargs)
+		elif pargs.play:
+			ret = self.play(pargs)
 			
-		elif args[0] in ["stop"]:
-
-			ip = self.get_ip(args)
-
-			if ip == None:
-				ret = "Provide IP not connected"
-			else:
-				ret = self.stop(ip)
+		elif pargs.stop:
+			ret = self.stop(pargs)
 			
-		elif args[0] in ["seek"]:
+		elif pargs.seek:
+			ret = self.seek(pargs)
 
-			ip = self.get_ip(args)
-
-			if ip == None:
-				ret = "Provide IP not connected"
-			else:
-				if len(args) >= 3:
-					ret = self.seek(ip,args[2])
-
-		elif args[0] == "listen":
-			if(len(args) == 1):
-				ips = self.factory.active_kodi_protocol_list
-			else:
-				ip = self.ip_to_protocol(args[1])
-				if ip == None:
-					ret = "IP not connected"
-					ips = []
-				else:
-					ips = [ip]	
-			for ip in ips:
-				# Set the msg_callback to print everything 
-				ip.msg_callback = self.string_callback
+		elif pargs.listen:
+			#ip.msg_callback = self.string_callback
+			self.listen(pargs)
 					
-		elif args[0] == "status":
-			ip = self.get_ip(args)
-
-			if ip == None:
-				ret = "Provide IP not connected"
-			else:
-				ret = self.get_status(ip)
-
+		elif pargs.status:
+			ret = self.status(pargs)
 
 		# List all connected devices
-		elif args[0] == "devices":
+		elif pargs.devices:
 			ret = self.factory.kodi_list_devices()
 
-		elif args[0] in ["load","open"]:
+		elif pargs.load:
+			ret = self.load(pargs)	
 
-			ip = self.get_ip(args)
-
-			if ip == None:
-				ret = "Provide IP not connected"
-			else:
-				ret = self.load(ip)
-			
-
-		elif args[0] == "":
-			pass
 		else:
-			ret = "%s is not a valid command"%(args[0])
+			ret = parser.format_help()
 
 		self.send_string(ret)
 	
 	def connect(self,args):
 		ips = []
-		if len(args) == 1:
+		# If no Ip was given, select all
+		if args.ip == None:
 			ips = self.factory.kodi_ip_list
-		if len(args) > 1:
-			ips = args[1:]
+		else:
+			ips.append(args.ip)
 
 		if len(ips) == 0:
 			return "Nothing to connect"
-		out = "Connecting to ..."
+		out = "Connecting to ...\n"
 		for ip in ips:
 			# TODO See if a connection is already present
 			# Connect if not
@@ -136,9 +101,13 @@ class Handler(basic.LineReceiver):
 		}
 		return base_msg
 
-	def get_status(self,p):
+	def status(self,args):
 		msg = self.create_base_msg()
 		msg["method"] = "Player.GetActivePlayers"
+
+		p = self.get_protocol(args)
+		if p == None:
+			return "IP Not connected"
 
 		p.msg_callback = self.status_callback
 		p.sendMessage(msg)
@@ -150,54 +119,80 @@ class Handler(basic.LineReceiver):
 			ret = "Playing: "+str(msg["result"])
 		self.send_string(ret)
 
-	def play(self,p):
+	def play(self,args):
 		msg = self.create_base_msg()
 		msg["method"] = "Player.PlayPause"
 		msg["params"] = {
 					"playerid":1
 				}
 
-		# We dont really care about any call back for this
-		#p.msg_callback = self.string_callback
+		p = self.get_protocol(args)
+		if p == None:
+			return "IP Not connected"
+
 		p.sendMessage(msg)
 		self.send_string("PlayPause Toggled")
 
-	def stop(self,p):
+	def stop(self,args):
 		msg = self.create_base_msg()
 		msg["method"] = "Player.Stop"
 		msg["params"] = {
 					"playerid":1
 				}
 
-		# We dont really care about any call back for this
-		#p.msg_callback = self.string_callback
+		p = self.get_protocol(args)
+		if p == None:
+			return "IP Not connected"
+
 		p.sendMessage(msg)
 		self.send_string("Stopped")
 
-	def seek(self,p,percent):
+	def seek(self,args):
+
+		if args.seek == None:
+			return "Seek Percentage Not Provided"
+
 		msg = self.create_base_msg()
 		msg["method"] = "Player.Seek"
 		msg["params"] = {
 					"playerid":1,
-					"value":float(percent)
+					"value":float(args.seek)
 				}
 
-		# We dont really care about any call back for this
-		#p.msg_callback = self.string_callback
+		p = self.get_protocol(args)
+		if p == None:
+			return "IP Not connected"
+
+		
 		p.sendMessage(msg)
 		self.send_string("Seek to "+str(percent))
 		
-	def load(self,p):
+	def load(self,args):
+
+		if args.load == None:
+			return "No Video Provided to load"
+		
+		# Find the video on the file system. 
+		path = self.find_videos(args.load) 
+		if path == None:
+			return "Could not find %s on the server"%args.load
+		if type(path) == list:
+			return "Query not specific enough: %s"%repr(path)
+	
+
 		msg = self.create_base_msg()
 		msg["method"] = "Player.Open"
 		msg["params"] = {"item": {
-						"file":"nfs://192.168.0.200/srv/nfs4/media/Movies/Features/Lucy.mkv"
+					"file":"nfs://192.168.0.200"+path
 					}
 				}
  
+		p = self.get_protocol(args)
+		if p == None:
+			return "IP Not connected"
 
 		# We dont really care about any call back for this
-		p.msg_callback = self.string_callback
+		#p.msg_callback = self.string_callback
 		p.sendMessage(msg)
 		self.send_string("Video Opened")
 
@@ -217,15 +212,18 @@ class Handler(basic.LineReceiver):
 		
 	
 
-	def ip_to_protocol(self,ip):
+	def get_protocol(self,args):
+		if args.ip == None:
+			return self.factory.active_kodi_protocol_list[0]
+
 		for d in self.factory.active_kodi_protocol_list:
-			if d.transport.getPeer().host == ip:
+			if d.transport.getPeer().host == args.ip:
 				return d
 
 		return None
 
 	movie_directory = "/mnt/raid/Movies/Features/"
-	def search(self,q):
+	def search(self,args):
 		all_movies = sorted(os.listdir(self.movie_directory))
 		show_movies = [] 
 		limit = 20
@@ -240,11 +238,11 @@ class Handler(basic.LineReceiver):
 			if m[-4:] != ".mkv":
 				continue
 			# If not query, match all
-			if(q == ""):
+			if(args.search == ""):
 				show_movies.append(m[:-4])
 				continue
 			# Look if query is contained in this movie
-			if(q.lower() in m.lower()):
+			if(args.search.lower() in m.lower()):
 				show_movies.append(m[:-4])
 
 		ret = "Movies:\n"
