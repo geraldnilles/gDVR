@@ -4,6 +4,7 @@ from twisted.internet import reactor, protocol, task
 from twisted.protocols import basic
 import json_protocol
 import json
+import os
 
 # Handles Socket Requests
 class Handler(basic.LineReceiver):
@@ -22,6 +23,7 @@ class Handler(basic.LineReceiver):
 
 	def lineReceived(self, cmd):
 		# TODO Switch to lowercase
+		# TODO User Arg Parser to clean this up
 		# Separate by Whitespace
 		args = cmd.decode("utf-8").split()
 		ret = ""
@@ -30,7 +32,11 @@ class Handler(basic.LineReceiver):
 			ret = self.connect(args)
 		# Search for media that matches the provided string
 		elif args[0] == "search":
-			pass
+			if len(args) == 1:
+				q = ""
+			else:
+				q = args[1]
+			ret = self.search(q)
 		elif args[0] in ["play","pause"]:
 
 			ip = self.get_ip(args)
@@ -216,6 +222,35 @@ class Handler(basic.LineReceiver):
 				return d
 
 		return None
+
+	movie_directory = "/mnt/raid/Movies/Features/"
+	def search(self,q):
+		all_movies = sorted(os.listdir(self.movie_directory))
+		show_movies = [] 
+		limit = 20
+		for m in all_movies:
+			# Stop loop if limit is hit
+			if len(show_movies) > limit:
+				break
+			# Ignore Hidden Files
+			if m[0] == ".":
+				continue
+			# Ignore all but MKVs
+			if m[-4:] != ".mkv":
+				continue
+			# If not query, match all
+			if(q == ""):
+				show_movies.append(m[:-4])
+				continue
+			# Look if query is contained in this movie
+			if(q.lower() in m.lower()):
+				show_movies.append(m[:-4])
+
+		ret = "Movies:\n"
+		for m in show_movies:
+			ret += "  %s\n"%(m)
+
+		return ret			
 
 
 class KodiFactory(json_protocol.Factory):
