@@ -28,8 +28,9 @@ class Handler(basic.LineReceiver):
 		parser.add_argument("-t","--stop", action="store_true")
 		parser.add_argument("-l","--listen", action="store_true")
 		parser.add_argument("-a","--status", action="store_true")
+		parser.add_argument("-b","--button", metavar="button")
 		parser.add_argument("-d","--devices", action="store_true")
-		parser.add_argument("-o","--open","--load", 
+		parser.add_argument("-o","--load","--open", 
 				metavar="query")
 		
 		try:
@@ -69,6 +70,9 @@ class Handler(basic.LineReceiver):
 		elif pargs.load:
 			ret = self.load(pargs)	
 
+		elif pargs.button:
+			ret = self.button(pargs)	
+
 		else:
 			ret = parser.format_help()
 
@@ -87,6 +91,8 @@ class Handler(basic.LineReceiver):
 		out = "Connecting to ...\n"
 		for ip in ips:
 			# TODO See if a connection is already present
+			# Need to figure out a way that translates DNS
+			# names to IP addreesses first
 			# Connect if not
 			reactor.connectTCP(ip,9090,
 				self.factory.kodi_factory)
@@ -165,7 +171,33 @@ class Handler(basic.LineReceiver):
 
 		
 		p.sendMessage(msg)
-		self.send_string("Seek to "+str(percent))
+		self.send_string("Seek to %s percent"+args.seek)
+
+	def random_episodes(self,args):
+		# Find Directory from Query
+		shows = self.find_tv_shows(args)
+		if(len(shows) == 0):
+			return "Could not find any matching TV shows"
+		if(len(shows) > 1):
+			return ("Too Many Shows match the query "
+					+repr(shows))
+		
+		# Get a sorted list
+		episodes = sorted(os.listdir(self.tv_path+shows[0]))
+		# Pick a random point in the list
+		start_index = random.randint(0,len(episodes)-num_play)
+		stop_index = start_index + num_play
+		# Add the paths to the playlist
+		for e in episodes[start_index:stop_index]:
+			playlist.append(self.tv_path+shows[0]+e) 
+	
+	playlist = []
+	
+	def playlist_callback(self,proto,msg):
+		# Check Message Type.
+		# If OnStop, Start the next item on the playlist
+		pass
+	
 		
 	def load(self,args):
 
@@ -173,17 +205,19 @@ class Handler(basic.LineReceiver):
 			return "No Video Provided to load"
 		
 		# Find the video on the file system. 
-		path = self.find_videos(args.load) 
-		if path == None:
+		matches = self.find_movies(args.load) 
+		if len(matches) == 0:
 			return "Could not find %s on the server"%args.load
-		if type(path) == list:
-			return "Query not specific enough: %s"%repr(path)
-	
+		if len(matches) > 1:
+			return "Query not specific enough: %s"%repr(matches)
+
 
 		msg = self.create_base_msg()
 		msg["method"] = "Player.Open"
 		msg["params"] = {"item": {
-					"file":"nfs://192.168.0.200"+path
+					"file":("nfs://192.168.0.200"
+						+self.movie_directory
+						+matches[0])
 					}
 				}
  
@@ -195,6 +229,49 @@ class Handler(basic.LineReceiver):
 		#p.msg_callback = self.string_callback
 		p.sendMessage(msg)
 		self.send_string("Video Opened")
+
+	def button(self,args):
+
+		p = self.get_protocol(args)
+
+		msg = self.create_base_msg()
+
+		if args.button == "up":
+			msg["method"] = "Input.Up"
+		elif args.button == "down":
+			msg["method"] = "Input.Down"
+		elif args.button == "left":
+			msg["method"] = "Input.Left"
+		elif args.button == "right":
+			msg["method"] = "Input.Right"
+		elif args.button == "back":
+			msg["method"] = "Input.Back"
+		elif args.button == "select":
+			msg["method"] = "Input.Select"
+
+		p.sendMessage(msg)
+		self.send_string("Command %s sent"%args.button)
+	
+
+	# Listen to TCP traffic from one or all Kodi devices and print
+	# packets to the screen.
+	def listen(self,args):
+		protos = []
+		# If ip provided, attempt to find it and add it to the
+		# proto list
+		if args.ip:
+			p = self.get_protocol(args)
+			if p:
+				protos.append(p)
+		# If no ip provided, add all connected devices to the 
+		# proto list.
+		else:
+			protos = self.factory.active_kodi_protocol_list
+
+		# For all protocols, assign the "string_callback" so 
+		# that all data is printed
+		for p in protos:
+			p.msg_callback = self.string_callback
 
 
 	def string_callback(self,msg):
@@ -222,8 +299,17 @@ class Handler(basic.LineReceiver):
 
 		return None
 
-	movie_directory = "/mnt/raid/Movies/Features/"
 	def search(self,args):
+		show_movies = self.find_movies(args.search)
+		ret = "Movies:\n"
+		for m in show_movies:
+			ret += "  %s\n"%(m[:-4])
+
+		return ret
+		
+
+	movie_directory = "/srv/nfs4/media/Movies/Features/"
+	def find_movies(self,query):
 		all_movies = sorted(os.listdir(self.movie_directory))
 		show_movies = [] 
 		limit = 20
@@ -238,18 +324,14 @@ class Handler(basic.LineReceiver):
 			if m[-4:] != ".mkv":
 				continue
 			# If not query, match all
-			if(args.search == ""):
-				show_movies.append(m[:-4])
+			if(query == ""):
+				show_movies.append(m)
 				continue
 			# Look if query is contained in this movie
-			if(args.search.lower() in m.lower()):
-				show_movies.append(m[:-4])
+			if(query.lower() in m.lower()):
+				show_movies.append(m)
 
-		ret = "Movies:\n"
-		for m in show_movies:
-			ret += "  %s\n"%(m)
-
-		return ret			
+		return show_movies
 
 
 class KodiFactory(json_protocol.Factory):
