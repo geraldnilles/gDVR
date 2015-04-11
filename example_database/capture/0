@@ -1,0 +1,6 @@
+
+# Name of the recording.  
+name: Modern Family - S3 E15
+# Specify the time when the recording shoudl be stopped in Unix time
+end_time: 1234567890
+

@@ -1,0 +1,109 @@
+#!/user/bin/env python
+
+import gdvr_config
+import sys
+import common
+
+usage = """
+Usage:
+	capture /path/to/tuners/id
+	capture id
+"""
+
+class Tuner:
+	def __init__(self,tuner_path)
+		# Check if tuner Path is valid
+		if(os.path.exists(tuner_path)):
+			self.path = tuner_path
+			self.load_tuner_info() 	
+			return
+		# Check if just the ID was provided instead of the path
+		if(os.path.exists(gdvr_config.database_path+"/tuners/"
+				+tuner_path))	
+			self.path = gdvr_config.database_path+"/tuners/"
+			self.path += +tuner_path
+			self.load_tuner_info()
+			return
+
+		print ("Tuner Path/ID was not valid: %s"%tuner_path)
+		print (usage)
+		exit()
+
+	def load_tuner_info():
+		# Load Tuner COnfig file self.path
+		config = commong.read_config(self.path)
+		self.device_id = config["device_id"]
+		self.number = config["tuner_number"]
+		self.tuner_id = self.path.split("/")[-1]
+		self.capture_file_path = (gdvr_config.database_path
+					+"/capture/"+self.tuner_id)
+		self.capture_folder_path =gdvr_config.database_path+"/capture/"
+
+	def run(self):
+		# Main Loop
+		while(1):
+			# Attempt to Start a capture
+			self.capture()
+			# Wait 10 seconds before trying again
+			time.sleep(10)
+
+	def start(self):
+		# If Capture doesnt exist, exit
+		if(not os.path.exists(self.capture_file_path)):
+			return False
+		# Read Capture File
+		config = commong.read_config(self.capture_file_path)
+		self.title = config["title"]
+		# TODO parse other types of time format
+		self.endtime = int(config["endtime"])
+		self.channel = config["channel"]
+		# If time has already past, return immediately
+		if self.endtime < time.time():
+			return
+		# Change Channel
+		self.set_channel()
+		# Start the capture process	
+		self.capture()
+	
+	def set_channel(self):
+		subprocess.call(["hdhomerun_config",self.device_id,"set",
+				"/tuner%d/vchannel"%self.number,
+				self.channel])
+
+	def capture(self):
+		# Start the recording
+		p = subprocess.POpen(["hdhomerun_config",self.device_id,
+				"save",
+				gdvr_config.database_path+"/catpure/"
+					+title+".mpeg2"])
+		while (1):
+			# If Time is up, stop the recording
+			if(time.time() > self.endtime):
+				break
+			# If someone deletes the capture file, stop the 
+			# recording
+			if(not os.path.exists(self.capture_file_path)):
+				break
+			# if process stopped on its own, break
+			if p.poll()
+				break
+		# Terminate the process
+		p.terminate()
+		# Wait for it to close
+		p.wait()
+		# Deleate the Capture File to signify that we are done
+		os.path.remove(self.capture_file_path)
+		
+		
+if __name__ == "__main__":
+	if len(sys.argv) < 2:
+		print ("You need to specify a tuner file to start the process")
+		print (usage)
+		exit()
+
+	t = Tuner(sys.argv[1])
+
+	# Star the loop
+	t.run()
+
+
