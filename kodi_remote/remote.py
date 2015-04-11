@@ -30,6 +30,9 @@ class Handler(basic.LineReceiver):
 		parser.add_argument("-a","--status", action="store_true")
 		parser.add_argument("-b","--button", metavar="button")
 		parser.add_argument("-d","--devices", action="store_true")
+		parser.add_argument("-r","--random", metavar="tv show")
+		parser.add_argument("-n","--number", 
+					metavar="number of episodes")
 		parser.add_argument("-o","--load","--open", 
 				metavar="query")
 		
@@ -69,6 +72,9 @@ class Handler(basic.LineReceiver):
 
 		elif pargs.load:
 			ret = self.load(pargs)	
+
+		elif pargs.random:
+			ret = self.random(pargs)	
 
 		elif pargs.button:
 			ret = self.button(pargs)	
@@ -173,30 +179,71 @@ class Handler(basic.LineReceiver):
 		p.sendMessage(msg)
 		self.send_string("Seek to %s percent"+args.seek)
 
-	def random_episodes(self,args):
+	# Play a random set of episodes
+	def random(self,args):
 		# Find Directory from Query
 		shows = self.find_tv_shows(args)
 		if(len(shows) == 0):
-			return "Could not find any matching TV shows"
+			return "Could not %s on the server"%args.random
 		if(len(shows) > 1):
 			return ("Too Many Shows match the query "
 					+repr(shows))
-		
+		# Figure out how many episodes to play
+		num_play = 3
+		if args.number:
+			num_play = int(args.number)
+			if num_play < 1:
+				num_play = 3		
+
+
 		# Get a sorted list
 		episodes = sorted(os.listdir(self.tv_path+shows[0]))
+
+		if num_play > len(episodes):
+			num_play = len(episodes)
+		
 		# Pick a random point in the list
 		start_index = random.randint(0,len(episodes)-num_play)
+		# Set the stop point
 		stop_index = start_index + num_play
 		# Add the paths to the playlist
 		for e in episodes[start_index:stop_index]:
-			playlist.append(self.tv_path+shows[0]+e) 
+			self.playlist.append(self.tv_directory+shows[0]+"/"+e) 
+
+		msg = self.create_base_msg()
+		msg["method"] = "Player.Open"
+		msg["params"] = {"item": {
+					"file":("nfs://192.168.0.200"
+						+self.playlist.pop())
+					}
+				}
+ 
+		p = self.get_protocol(args)
+		if p == None:
+			return "IP Not connected"
+
+		# We dont really care about any call back for this
+		p.msg_callback = self.string_callback
+		p.sendMessage(msg)
+		self.send_string("Playlist Started")
 	
 	playlist = []
-	
+	# NOTE: This wont work.  It requires that this Handler class stay
+	# alive. And we cant expect that to be true.  It would be better if
+	# the playlist were embedded int the Main Factory, or in the Kodi 
+	# protocol instance, or in a separate daemon
 	def playlist_callback(self,proto,msg):
 		# Check Message Type.
-		# If OnStop, Start the next item on the playlist
-		pass
+		if msg["method"] == "Player.OnStop":
+			new_msg = self.create_base_msg()
+			new_msg["method"] = "Player.Open"
+			new_msg["params"] = {"item":{"file":(
+					"nfs://192.168.0.200"
+					+self.playlist.pop())
+					}
+				}
+			proto.sendMessage(new_msg)
+			self.send_string("Next Item Playing")
 	
 		
 	def load(self,args):
