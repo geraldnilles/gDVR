@@ -15,6 +15,8 @@ def init_tuners():
 	"""	
 	pass
 
+# TODO Initialize the database folder structure if it does not existo already
+"""
 # Initialize if it does not exist
 if (not os.path.exists(database_path)):
 	os.mkdir(database_path)
@@ -27,4 +29,4 @@ for f in required_subfolders:
 			init_tuners()
 
 # If any of these folder already exist, no initialization will be done
-
+"""

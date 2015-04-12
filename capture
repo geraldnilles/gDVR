@@ -1,8 +1,11 @@
-#!/user/bin/env python
+#!/usr/bin/env python
 
 import gdvr_config
 import sys
 import common
+import os
+import subprocess
+import time
 
 usage = """
 Usage:
@@ -11,7 +14,7 @@ Usage:
 """
 
 class Tuner:
-	def __init__(self,tuner_path)
+	def __init__(self,tuner_path):
 		# Check if tuner Path is valid
 		if(os.path.exists(tuner_path)):
 			self.path = tuner_path
@@ -19,19 +22,20 @@ class Tuner:
 			return
 		# Check if just the ID was provided instead of the path
 		if(os.path.exists(gdvr_config.database_path+"/tuners/"
-				+tuner_path))	
+				+tuner_path)):
 			self.path = gdvr_config.database_path+"/tuners/"
-			self.path += +tuner_path
+			self.path += tuner_path
 			self.load_tuner_info()
 			return
+
 
 		print ("Tuner Path/ID was not valid: %s"%tuner_path)
 		print (usage)
 		exit()
 
-	def load_tuner_info():
+	def load_tuner_info(self):
 		# Load Tuner COnfig file self.path
-		config = commong.read_config(self.path)
+		config = common.read_config(self.path)
 		self.device_id = config["device_id"]
 		self.number = config["tuner_number"]
 		self.tuner_id = self.path.split("/")[-1]
@@ -41,24 +45,31 @@ class Tuner:
 
 	def run(self):
 		# Main Loop
+		print("Tuner %s Started"%self.tuner_id)
+		print("Waiting for a file to be place at %s"%(
+			self.capture_file_path))
 		while(1):
 			# Attempt to Start a capture
-			self.capture()
+			self.start()
 			# Wait 10 seconds before trying again
 			time.sleep(10)
 
 	def start(self):
+		print("Attempting to start a recording")
 		# If Capture doesnt exist, exit
 		if(not os.path.exists(self.capture_file_path)):
+			print("No Jobs, Exit")
 			return False
 		# Read Capture File
-		config = commong.read_config(self.capture_file_path)
+		config = common.read_config(self.capture_file_path)
 		self.title = config["title"]
 		# TODO parse other types of time format
 		self.endtime = int(config["endtime"])
 		self.channel = config["channel"]
 		# If time has already past, return immediately
 		if self.endtime < time.time():
+			print("Recording is too old")
+			os.remove(self.capture_file_path)
 			return
 		# Change Channel
 		self.set_channel()
@@ -67,32 +78,47 @@ class Tuner:
 	
 	def set_channel(self):
 		subprocess.call(["hdhomerun_config",self.device_id,"set",
-				"/tuner%d/vchannel"%self.number,
+				"/tuner%s/vchannel"%self.number,
 				self.channel])
 
 	def capture(self):
+		# TODO Make sure mpeg file doesnt already exist
 		# Start the recording
-		p = subprocess.POpen(["hdhomerun_config",self.device_id,
+		p = subprocess.Popen(["hdhomerun_config",
+				self.device_id,
 				"save",
-				gdvr_config.database_path+"/catpure/"
-					+title+".mpeg2"])
+				self.number,
+				self.capture_folder_path+self.title+".mpeg2"],
+				# Ignore all crap printed by this app
+				#stdout = subprocess.DEVNULL,
+				#stderr = subprocess.DEVNULL
+				)
 		while (1):
 			# If Time is up, stop the recording
 			if(time.time() > self.endtime):
+				print("The Recording is finished")
+				os.remove(self.capture_file_path)
 				break
 			# If someone deletes the capture file, stop the 
 			# recording
 			if(not os.path.exists(self.capture_file_path)):
+				print("The Recording was stopped by the user")
 				break
 			# if process stopped on its own, break
-			if p.poll()
+			if p.poll() != None:
+				print("The Recording has stopped unexpectedly")
+				# TODO Print the stderr/out of the hdhomerun
+				# script so we know what went wrong
 				break
+
+			time.sleep(10)
+			print("Recording In Progress. %d seconds left"%(
+				int(self.endtime - time.time())))
 		# Terminate the process
 		p.terminate()
 		# Wait for it to close
 		p.wait()
 		# Deleate the Capture File to signify that we are done
-		os.path.remove(self.capture_file_path)
 		
 		
 if __name__ == "__main__":

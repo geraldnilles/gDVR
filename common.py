@@ -12,7 +12,7 @@ def read_config(path):
 
 	c.read_string(data)
 	
-	return c.["DEFAULT"]
+	return c["DEFAULT"]
 
 def write_config(data):
 	pass
