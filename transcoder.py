@@ -1,15 +1,11 @@
 #!/usr/bin/env python
 
-
-from twisted.internet import reactor, protocol, task
-from twisted.protocols import basic
+import common
+import gdvr_config
 import subprocess
 import os
 
-MP4_PATH = "/mnt/raid/Recordings/"
-MPEG_PATH = MP4_PATH+".mpeg/"
-
-class transcoder:
+class Transcoder:
 	def __init__(self):
 		self.reset()
 
@@ -17,6 +13,8 @@ class transcoder:
 		self.process = None
 		self.infile = None
 		self.outfile = None
+		self.path = gdvr_config.database_path+"/capture/"
+
 
 	def start(self):
 		if self.infile == None:
@@ -25,25 +23,25 @@ class transcoder:
 		self.outfile = self.infile.rsplit(".",1)[0]+".mp4"
 		
 		self.process = subprocess.Popen(["ffmpeg", 
-					# Specify Input File
-					"-i",MPEG_PATH+self.infile, 
-					"-map", "0", # Transcode All Audio tracks
-					# Scale to DVD Quality and apply deinterlacin
-					"-vf", "yadif,scale=trunc(oh*a/2)*2:480", 
-					# Use h264 codec
-					"-c:v", "libx264",
-					# Use high computation encoding 
-					"-preset", "slow", 
-					# Use High Quality
-					"-crf", "20",
-					# Reduce sound to stereo 
-					"-ac", "2", 
-					"-c:a", "libfdk_aac",
-					"-y", # Overwrite all files automatically
-					MPEG_PATH+self.outfile],
-					stdout = subprocess.DEVNULL,
-					stderr = subprocess.DEVNULL
-					)
+				# Specify Input File
+				"-i",self.infile, 
+				"-map", "0", # Transcode All Audio tracks
+				# Scale to DVD Quality and apply deinterlacin
+				"-vf", "yadif,scale=trunc(oh*a/2)*2:480", 
+				# Use h264 codec
+				"-c:v", "libx264",
+				# Use high computation encoding 
+				"-preset", "slow", 
+				# Use High Quality
+				"-crf", "20",
+				# Reduce sound to stereo 
+				"-ac", "2", 
+				"-c:a", "libfdk_aac",
+				"-y", # Overwrite all files automatically
+				self.outfile],
+				stdout = subprocess.DEVNULL,
+				stderr = subprocess.DEVNULL
+				)
 
 		print ("Transcoding of %s started"%self.infile)	
 
@@ -66,14 +64,38 @@ class transcoder:
 		# Find a file to transcode
 		# TODO Randomize the order of the list so that a single
 		# problematic file does not hold up the transcoding line
-		for f in os.listdir(MPEG_PATH):
+		for f in os.listdir(self.path):
 			# Only transcode mpeg files
-			if f[-4:] == "mpeg":
-				self.infile = f
-				self.start()
-				return
+			if f[-4:] != "mpeg":
+				continue
+
+			# Make sure there is not a capture ongoing
+			if(self.capture_in_prgress(f[:-5])):
+				continue
+	
+			self.infile = self.path+f
+			self.start()
+			return
 			
-			
+	def capture_in_progress(self,title):	
+		# Get a list of all tuners
+		tuners = os.listdir(gdvr_config.database_path+"/tuners/")
+		# Get a list of all files in the capture directory
+		files = os.listdir(self.path)
+	
+		for t in tuners:
+			# If a file matches the tuner ID, then that tuner
+			# is currently recording
+			if t in files:
+				# Read that tuner file and see if the
+				# title matches
+				config = common.read_config(self.path+t)
+				if config["title"] == title:
+					# Title Matchs, so the recording
+					# is in progress
+					return True
+		# No matches so this recording is not in progress
+		return False
 
 	def check(self):
 		if self.process == None:
@@ -88,43 +110,22 @@ class transcoder:
 			# TODO Analayze return code and dont delete 
 			print("Transcoding of %s finished with code %d"
 				%(self.infile,retcode))	
-			os.rename(MPEG_PATH+self.outfile,MP4_PATH+self.outfile)
-			os.remove(MPEG_PATH+self.infile)
+			# TODO Move MP4 to a different folder
+			os.remove(self.infile)
 
 			# Clear out the transcoder
 			self.reset()
 
-class Handler(basic.LineReceiver):
-	def lineReceived(self,cmd):
-		
-		args = cmd.decode("utf-8").split()
-		ret = ""
-		if args[0] == "status":
-			ret = "Transcoding %s"%self.factory.transcoder.infile
-		elif args[0] == "abort":
-			self.factory.transcoder.abort()
-			ret = "Aborted"
-		else:
-			ret = "%s is not a valid command"%(args[0])
-
-		self.sendLine(bytes(ret,"utf-8"))
-
-class Factory(protocol.ServerFactory):
-	protocol = Handler
-
-	def __init__(self):
-		self.transcoder = transcoder()
-
-	def check_transcoder(self):
-		self.transcoder.check()
-
 if __name__ == "__main__":
 
-	f = Factory()
+	t = Transcoder()
 
-	reactor.listenTCP(9173,f)
+	while(1):
+		t.check()
+		
 
-	t = task.LoopingCall(f.check_transcoder)
-	t.start(30)
+		time.sleep(60)
 
-	reactor.run()	
+	
+
+
