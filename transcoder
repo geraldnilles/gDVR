@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 import common
-import gdvr_config
 import subprocess
 import os
+import time
 
 class Transcoder:
 	def __init__(self):
@@ -13,7 +13,7 @@ class Transcoder:
 		self.process = None
 		self.infile = None
 		self.outfile = None
-		self.path = gdvr_config.database_path+"/capture/"
+		self.path = common.database_path+"/capture/"
 
 
 	def start(self):
@@ -70,7 +70,7 @@ class Transcoder:
 				continue
 
 			# Make sure there is not a capture ongoing
-			if(self.capture_in_prgress(f[:-5])):
+			if(self.capture_in_progress(f[:-5])):
 				continue
 	
 			self.infile = self.path+f
@@ -79,7 +79,7 @@ class Transcoder:
 			
 	def capture_in_progress(self,title):	
 		# Get a list of all tuners
-		tuners = os.listdir(gdvr_config.database_path+"/tuners/")
+		tuners = os.listdir(common.database_path+"/tuners/")
 		# Get a list of all files in the capture directory
 		files = os.listdir(self.path)
 	
@@ -122,8 +122,6 @@ if __name__ == "__main__":
 
 	while(1):
 		t.check()
-		
-
 		time.sleep(60)
 
 	
