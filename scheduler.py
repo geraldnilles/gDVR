@@ -1,20 +1,13 @@
 #!/usr/bin/env python
 
 
-from twisted.internet import reactor, protocol, task
-from twisted.protocols import basic
-import dateutil.parser
 import time
+import common
 
-# Scheduler
-#
-# This class will maintain an agenda (list of recording events).  A 
-# periodic callback function will be used to monitor the agenda and
-# trigger recordings.
-class scheduler:
+class Scheduler:
 	# Initialize the agenda
 	def __init__(self):
-		self.agenda = []
+		self.path = commong.database_path+"/schedule/"
 
 	# Start capturing video
 	# Returns True if the capture was started succesfully.
@@ -51,31 +44,72 @@ class scheduler:
 		# all recordings by returning True
 		return True
 
-	def read_configs(self):
-		# List to hold the manual shows
-		shows = []
-		for path in ["./gdvr.conf", #Current Directory
-				"~/.gdvr.conf", # Home Directory
-				"/etc/gdvr.conf"]: # Global Dir
-			# Existance Check
-			if not os.path.exists(path):
-				continue
-			# Read Conf file and store data into disct
-			c = configparser.ConfigParser()
-			c.read(path)
-			for sec in c.sections():
-				# We only care about manual scheduling
-				if c[sec]["type"] == "manual":
-					s = {}
-					for i in c[sec]:
-						s[i] = c[sec][i]
-					s["title"] = sec
-					shows.append(s)
-		self.parse_conf(shows)
-		return False
-
 	# Convers the conf file data into a usable start time
-	def parse_configs(self,shows):
+	def check(self):
+		for f in os.listdir(self.path):
+			event = common.read_config(path+f)
+
+			# Check if we should be recording this file
+			if(self.is_ready(event) and 
+					not self.is_recording(event)):
+				self.start_recording(config)
+			# If file is stlae
+			if(self.is_stale(event)):
+				os.remove(self.path+f)
+
+	def calc_duration(self,duration):
+		# Generate Duration 
+		dur_str = duration.strip()
+		base = 0
+		multiplier = 0
+		if(dur_str[-1] in ["H","h"]:
+			base=float(dur_str[:-1])
+			multipler = 60*60
+		elif(dur_str[-1] in ["M","m"]:
+			base=float(dur_str[:-1])
+			multiplier = 60
+		elif(dur_str[-1] in ["S","s"]:
+			base=float(dur_str[:-1])
+			multiplier = 1
+		else:
+			base=float(dur_str)
+			multiplier = 1
+
+		return base*multiplier
+
+	def calc_time(self,time):
+		pass
+
+	def ready(self,event):
+		# If a recurring event...
+		if "day_of_week" in event:
+			# Is today in the day of week
+			today = datetime.date.today()
+			if today_dow not in dows:
+				return False
+
+			new = time.time()
+			start = self.calc_time()
+			end = start + self.calc_duration(event["duration"])
+			if(now >= start and now <= end):
+				return True
+			
+		else:
+			now = time.time()
+			start = int(event["start_time"])
+			if "end_time" in event:
+				end = int(event["end_time"])
+			else:
+				end = start + self.calc_duration(
+					event["duration"])
+
+			if(now >= start and now <= end):
+				return True
+
+		return False
+				
+
+	def parse(self,event):
 		for s in shows:
 			# Parse the repeat string and convert to a list
 			# of days in the week
@@ -144,48 +178,12 @@ class scheduler:
 				# Add the new event to the agenda
 				self.agenda.append(event)
 
-	def check(self):
-		to_remove = []
-		# TODO Sort by Priority
-		for event in self.agenda:
-			# Attempt to kick of a stream capture
-			# If returns True, then this event
-			if self.start_capture(a)
-				to_remove.append(a)	
-		# Remove the events that are done	
-		for events in to_remove:
-			self.agenda.remove(events)
 
-
-class Handler(basic.LineReceiver):
-	def lineReceived(self,cmd):
-		pass
-
-class Factory(protocol.ServerFactory):
-	protocol = Handler
-
-	def __init__(self):
-		# Generate a Scheduler object
-		self.scheduler = scheduler()
-
-	def check_schedule(self):
-		# Check the Scheduler
-		self.scheduler.check()
-
-	def update_config(self):
-		self.scheduler.read_configs()
 
 
 if __name__ == "__main__":
-
-	f = Factory()
-	reactor.listenTCP(9174,f)
-	# Reload the config files every hour so modifications can be made	
-	t1 = task.LoopingCall(f.update_config())
-	t1.start(60*60)
-	# Check the schedule every 10 seconds.
-	t2 = task.LoopingCall(f.check_schedule())
-	t2.start(10)
-	
-	reactor.run()
+	s = Scheduler()
+	while(1):
+		s.check()
+		time.sleep(10)
 
