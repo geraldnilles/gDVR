@@ -2,7 +2,7 @@
 
 # This is an example of a recurring Event
 
-title: E_News
+title: E News
 day_of_week: MTWRF
 time: 6PM
 duration: 1h

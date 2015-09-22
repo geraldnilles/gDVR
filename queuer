@@ -1,0 +1,211 @@
+#!/usr/bin/env python
+
+### @package queuer
+# Queues recordings based on the /schedule folder
+#
+# Whenever the Queuer runs, it will read all of the files in /schedule and
+# automatically generate /capture files when required.  It will aslo handle
+# conflicts when there are not enough tuners or when 2 schedule entreies are
+# trying to record the same channel twice.
+
+import random
+
+## Parse Schedule
+#
+# Read a file from /schedule, determines if a recording should start, and
+# returns the schedule object if the recording should start.  If not, it returns
+# None
+def parse_schedule(path): 
+
+	# Read the scheudle file and determine the following:
+	start_time = 0
+	duration = 0
+	channel = 0
+	title = ""
+
+	# Load the schedule to a dictionary
+	sch = common.read_config(path) 
+
+	if "title" not in sch:
+		title = "untitled"
+	else:
+		title = sch["title"]
+
+	if "channel" not in sch:
+		# No Channel Specified
+		return -1
+	else:
+		# TODO Do other error correction
+		channel = sch["channel"]
+
+	## Figure out Start time
+	if calc_start_time(sch) == None:
+		return None	
+
+	## Figure out duration
+	if calc_curation(sch) == None:
+		return None
+
+	# If start_time or duration could not be figured out, return None
+	if start_time == None or duration == None:
+		return None
+
+	cur_time = time.time()
+
+	if cur_time > start_time and cur_time < start_time + duration:
+		return sch
+
+	return None
+
+## Calculate Start Time
+#
+# Provide a schedule object and this function will calculate the start time in
+# unix time.  Start time can be provided as a day and time (Monday at 5pm).
+# This will determine the unix start time from the fuzzy time.
+def calc_start_time(sch):
+	if "start_time" in sch:
+		return 0
+
+	if "time" in sch:
+		t_str = sch["time"].strip()
+		t_str_spt = t_str.split(":")
+
+		h_str = "00"
+		m_str = "00"
+		s_str = "00"
+		pm = False
+
+		if "p" in t_str.lower():
+			pm = True
+
+		if len(t_str_apt) >= 1:
+			# hours + pm/am
+			h_str = t_str_spt[0]
+
+		if len(t_str_spt) >= 2:
+			# Hour:min + pm/am
+			m_str = t_str_spt[1]
+
+		if len(t_str_spt) >= 3:
+			s_str = t_str_spt[2]
+
+		# Load into a date option
+		date_obj = ...
+		# Convert to Unix Time and return
+		sch["start_time"] = date_obj.gmtime()
+		return 0
+
+	return None
+
+## Calculate Duration
+#
+# Provide a schedule object and it calculates the duration based on the start
+# and end times.
+def calc_duration(sch):
+	if "end_time" in sch:
+		sch["duration"] = sch["end_time"]-sch["start_time"]
+		return 0
+	if "duration" in sch:
+		# strip the duration string
+		d_str = sch["duration"].strip()
+		# Get number portion of the duration string
+		d_num = ...
+		# set the base multiplier  to 1
+		d_mul = 1
+		# get the letter portion of the duration string
+		d_ltr = ...
+		if d_ltr[1] == "s":
+			d_mul = 1
+		if d_ltr[1] == "m":
+			d_mul = 60
+		if d_ltr[1] == "h":
+			d_mul = 60*60
+		
+		# return the duration in seconds
+		sch["duration"] = d_num * d_mul 
+		return 0
+	return None
+			
+## Check if already recording
+#
+# Check all the files in the /captures folder and determine if the provided show
+# is already recording or not.
+def is_already_recording(show):
+	# Load all current captures
+	for c in common.full_path_list("captures"):
+		cobj = read_config(c)
+		# If the channel is the same, then the capture is already going on
+		if cobj["channel"] == show["channel"]:
+			return True
+
+	# If not conflicts with the current captures, then return False
+	return False
+		
+
+## Checks if a tuner is available
+#
+# Looks at all the files in the /tuners, compares it to all the files in the
+# /caputres and determines if a tuner is avaiable.  If a tuner is available,
+# this function will return the ID.  If not, it will return None.
+def tuner_is_available(): 
+	# Generate a randomized list of tuners
+	tuners = common.full_path_list("tuners")
+	random.shuffle(tuners)
+	# Check if a recording is in progress for each tuner
+	for t in common.short_path_list("tuners"):
+		rec_in_progress = False
+		for c in common.short_path_list("captures"):
+			if c == t:
+				rec_in_progress = True
+
+		# Retrn the first available tuner found
+		if not rec_in_progress:
+			return t
+
+	# TODO Check if new show's priority out-ranks a current recording.
+
+	# Otherwise, return None
+	return None
+
+## Start a Capture
+#
+# When a capturer is to start, call this function.  It will generate a new file
+# and place it in the capture folder.
+def create_capture_file(tuner,match):
+	out = {
+		end_time = 0
+		channel = 0
+		title = "" 
+		}
+	
+	# Generate a unique title for this recording
+	out["title"] = match["title"]+"-"+str(random.randint(0-1000))
+	# Generate an Endtime (probably wont always be this simple)
+	out["end_time"] = match["end_time"]
+	# Copy channel from match
+	out["channel"] = match["channel"]
+
+	# Write our capture to the capture folder
+	common.write_config(common.sub_path("capture")+str(tuner),out)
+
+## Check Schedule
+#
+# Reads all files in /schedule and parses them
+def check_schedule():
+	matches = []
+	for s in common.full_path_list("schedule")
+		ret = parse_schedule(s)
+		if ret != None:
+			matches.append(ret)
+
+	# TODO Sort matches by priority
+
+	for m in matches:
+		# CHeck if a tuner is available
+		tuner = tuner_is_available()
+		# If tuner is not available, you can skip the rest of the
+		# matches
+		if tuner != None:
+			create_capture_file(tuner,m)
+
+# vim:tw=80

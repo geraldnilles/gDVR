@@ -1,5 +1,16 @@
 #!/usr/bin/env python
 
+'''
+===========
+ Scheduler
+===========
+
+The Scheduler is a script that reads the local database and looks for matching
+shows.  If a match is found, it will create a file in the "scheudle" folder.
+From there, the capture process can record.
+
+'''
+
 
 import time
 import common
@@ -133,7 +144,7 @@ class Scheduler:
 				# Generate the start time float
 				day_str = d.strftime("%A")
 				dt = dateutil.parser.parse(day_str+" "
-					+s["start_time")
+					+s["start_time"])
 				event["start_time"] = dt.timestamp()	
 				# Generate the title name
 				event["name"]=d.strftime(s["title"]

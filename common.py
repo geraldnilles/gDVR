@@ -19,8 +19,13 @@ def write_config(data):
 # In the fugure, this will be pulled from the /etc/ folder
 database_path = "/mnt/raid/gDVR"	
 
-required_subfolders = ["shows","episodes","myshows","channels","capture",
-			"tuners"]
+required_subfolders = ["recordings", # Final Output folder of the DVR
+			"episodes", # Episode Details pulled from Online DB
+			"channels", # Channel Schedule pulled from Online DB
+			"subscriptions", # Shows the user subscribes to
+			"schedule", # upcoming recording events
+			"capture", # Current Recordings
+			"tuners"] # All tuners available to the DVR
 
 # Shoudl only be called if the tuners files dont already exist
 def init_tuners():
@@ -30,6 +35,24 @@ def init_tuners():
 	for each device, count the number of tuners and make an ID for each
 	"""	
 	pass
+
+
+# Generates a full-path list for the given subdirectory
+def full_path_list(subdir):
+	out = []
+	for x in short_path_list(subdir):
+		out.append(database_path+"/"+subdir+"/"+x)
+
+	# TODO Verify that these are not folders
+
+	return out
+		
+
+def short_path_list(subdir):
+	if subdir not in required_subfolders:
+		return []
+	return os.listdir(database_path+"/"+subdir)
+
 
 # TODO Initialize the database folder structure if it does not existo already
 """

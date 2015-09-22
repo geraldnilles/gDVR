@@ -1,0 +1,30 @@
+#!/usr/bin/env python
+
+'''
+=========
+ Fetcher
+=========
+
+The fetcher will grab data from the Schedules Direct database and populate it
+in the local database folder(s).  The database will consit of 2 folders, a
+channel folder and an episode folder.  The channel folder will contain 1 file
+for each channel.  The file will contain a schedule for that channel.  It will
+probably be easier just to use the JSON format used by Schedules Direct.  The
+Episode folder will contain a file for each episode contained in the schedules
+with specifics about the show title, episode title, season, actors, etc..
+
+'''
+
+def fetch_stationID_list():
+	pass
+
+def fetch_station_schedule():
+	pass
+
+def fetch_programID_list():
+	pass
+
+def fetch_program_info():
+	pass
+
+
