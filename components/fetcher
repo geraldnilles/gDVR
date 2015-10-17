@@ -13,6 +13,8 @@ probably be easier just to use the JSON format used by Schedules Direct.  The
 Episode folder will contain a file for each episode contained in the schedules
 with specifics about the show title, episode title, season, actors, etc..
 
+This code is not final.   it will not be fully implemented until Version 0.5
+
 '''
 
 def fetch_stationID_list():

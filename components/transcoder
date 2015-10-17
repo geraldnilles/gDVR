@@ -1,5 +1,15 @@
 #!/usr/bin/env python
 
+# Transcoder
+#
+# This component will implement a ffmpeg while loop.  It will periodically look
+# for recordings that need to be transcoded from MPEG2 to h264. 
+#
+# The current code is not tested.  It will be fully implemented in the 0.2
+# version release.  The current code is simply a first draft of how it want to
+# format the functions.
+
+
 import common
 import subprocess
 import os
@@ -13,14 +23,13 @@ class Transcoder:
 		self.process = None
 		self.infile = None
 		self.outfile = None
-		self.path = common.database_path+"/capture/"
 
 
 	def start(self):
 		if self.infile == None:
 			return True
 		# Remove the input extension and replace with mp4
-		self.outfile = self.infile.rsplit(".",1)[0]+".mp4"
+		self.outfile = self.infile.rsplit(".",1)[0]+".mkv"
 		
 		self.process = subprocess.Popen(["ffmpeg", 
 				# Specify Input File
@@ -64,39 +73,19 @@ class Transcoder:
 		# Find a file to transcode
 		# TODO Randomize the order of the list so that a single
 		# problematic file does not hold up the transcoding line
-		for f in os.listdir(self.path):
+		for f in common.full_path_list("recordings"):
 			# Only transcode mpeg files
 			if f[-4:] != "mpeg":
 				continue
 
-			# Make sure there is not a capture ongoing
-			if(self.capture_in_progress(f[:-5])):
+			# Only transcode completed programs
+			if ".rec." in f:
 				continue
-	
-			self.infile = self.path+f
+
+			self.infile = f
 			self.start()
 			return
 			
-	def capture_in_progress(self,title):	
-		# Get a list of all tuners
-		tuners = os.listdir(common.database_path+"/tuners/")
-		# Get a list of all files in the capture directory
-		files = os.listdir(self.path)
-	
-		for t in tuners:
-			# If a file matches the tuner ID, then that tuner
-			# is currently recording
-			if t in files:
-				# Read that tuner file and see if the
-				# title matches
-				config = common.read_config(self.path+t)
-				if config["title"] == title:
-					# Title Matchs, so the recording
-					# is in progress
-					return True
-		# No matches so this recording is not in progress
-		return False
-
 	def check(self):
 		if self.process == None:
 			# Nothing Going On, Scan for more work
@@ -126,4 +115,4 @@ if __name__ == "__main__":
 
 	
 
-
+# vim:tw=80

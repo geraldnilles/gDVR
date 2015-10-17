@@ -1,0 +1,383 @@
+#!/usr/bin/env python
+
+### @package queuer
+# Queues recordings based on the /schedule folder
+#
+# Whenever the Queuer runs, it will read all of the files in /schedule and
+# automatically generate /capture files when required.  It will aslo handle
+# conflicts when there are not enough tuners or when 2 schedule entreies are
+# trying to record the same channel twice.
+
+# TODO Use the datetime libarary to do time maniupations isntead of converting
+# everything to seconds
+
+
+import random
+import datetime
+import common
+import time
+import os
+
+## Parse Schedule
+#
+# Read a file from /schedule, determines if a recording should start, and
+# returns the schedule object if the recording should start.  If not, it returns
+# None
+def parse_schedule(path): 
+
+	# Return if filename starts with a . (hidden file for Unix)
+	short_path = path.split("/")[-1]
+	if short_path[0] == ".":
+		return None
+
+	# Load the schedule to a dictionary
+	sch = common.read_config(path) 
+
+	date_suffix = time.strftime("-%Y%m%d%H%M")
+
+	# Use the schedule file name as the UID
+	sch["uid"] = path.split("/")[-1]
+
+	if "title" not in sch:
+		title = "untitled"+date_suffix
+	else:
+		title = sch["title"]+date_suffix
+
+	if "channel" not in sch:
+		# No Channel Specified
+		return None
+
+	if "priority" in sch:
+		sch["priority"] = int(sch["priority"])
+	else:
+		sch["priority"] = 0
+
+	## Figure out Start time
+	if calc_start_time(sch) == None:
+		return None	
+
+	## Figure out duration
+	if calc_duration(sch) == None:
+		return None
+
+	if already_recording(sch):
+		return None
+
+	cur_time = time.time()
+
+	if (cur_time > sch["start_time"] and cur_time < sch["start_time"] 
+			+ sch["duration"]):
+		return sch
+
+	return None
+
+## Calculate Start Time
+#
+# Provide a schedule object and this function will calculate the start time in
+# unix time.  Start time can be provided as a day and time (Monday at 5pm).
+# This will determine the unix start time from the fuzzy time.
+def calc_start_time(sch):
+
+	# Create a local time struct
+	t = time.localtime()
+
+	if "start_time" in sch:
+		return 0
+
+	if "day_of_week" in sch:
+		sch["dow"] = sch["day_of_week"]
+
+	# Check if this schedule has Day of Week called out
+	if "dow" in sch:
+		# Conver the DoW string into an array of ints
+		# For example, "MW" woudl convert to [0,2]
+		dow_array = []
+		# Look up table for letters
+		lookup = {
+			"u":6,
+			"m":0,
+			"t":1,
+			"w":2,
+			"r":3,
+			"f":4,
+			"s":5
+		}
+		# Scan through each letter and add the correct decimal to the
+		# array
+		for letter in sch["dow"]:
+			l = letter.lower()
+			if l in lookup:
+				dow_array.append(lookup[l])
+
+		# If today is not one of these days, we will not calcualte a
+		# start time.  Retunr None
+		if t[6] not in dow_array:
+			return None
+
+	# If you have made it this far, the start time is sometime today
+	todays_date = datetime.date.today()
+
+	if "time" in sch:
+		# Strip the white space
+		t_str = sch["time"].strip()
+
+		hour = 00
+		minute = 00
+		second = 00
+		pm = False
+
+		# Scan through the string
+		for i in range(len(t_str)):
+			# Convert to lower case
+			char = t_str[i].lower()
+
+			# If a P is found, mark pm as true
+			if char == "p":
+				pm = True
+			# if an A is found, mark pm as false
+			if char == "a":
+				pm = False
+			# Ounce either A or P is found, whipe out the rest of
+			# the string
+			if char == "p" or char == "a":
+				t_str = t_str[:i]
+				break
+
+		# Split the rest of the time by the colon character and
+		# determine the hour/minute/second
+		t_str_spt = t_str.split(":")
+		if len(t_str_spt) >= 1:
+			# hours + pm/am
+			hour = int(t_str_spt[0])
+			if pm:
+				hour += 12
+
+		if len(t_str_spt) >= 2:
+			# Hour:min + pm/am
+			minute = int(t_str_spt[1])
+
+		if len(t_str_spt) >= 3:
+			second = int(t_str_spt[2])
+
+		time_obj = datetime.time(hour,minute,second)
+
+		dt = datetime.datetime.combine(todays_date, time_obj)
+
+		# Convert to Unix Timestamp and return 0 to show that everything
+		# went well
+		sch["start_time"] = dt.timestamp()
+		return 0
+
+	return None
+
+## Calculate Duration
+#
+# Provide a schedule object and it calculates the duration based on the start
+# and end times.
+def calc_duration(sch):
+	# If an end timestamp already exists, convert it to duration and exit
+	if "end_time" in sch:
+		sch["duration"] = sch["end_time"]-sch["start_time"]
+		return 0
+
+	# If a duration was returned
+	if "duration" in sch:
+		# strip the bookend whitespace duration string
+		d_str = sch["duration"].strip()
+		# Get number portion of the duration string
+		d_ltr = None
+		d_num = None
+		# Scan through each letter
+		for i in range(len(d_str)):
+			l = d_str[i].lower()
+			# Look for the first multiplier 
+			# TODO Look for illegal characters
+			if l in ["m","s","h"]:
+				# Convert everything before the first letter
+				# into a float
+				d_num = float(d_str[:i])
+				# Write the li
+				d_ltr = l
+				break
+		# If no leter was found, assume the duration is in seconds
+		if d_ltr == None:
+			d_num = float(d_str)
+			d_ltr = "s"
+		# set the base multiplier  to 1
+		d_mul = 1
+		if d_ltr == "s":
+			d_mul = 1
+		if d_ltr == "m":
+			d_mul = 60
+		if d_ltr == "h":
+			d_mul = 60*60
+		
+		# return the duration in seconds
+		sch["duration"] = d_num * d_mul 
+		return 0
+	return None
+			
+## Check if already recording
+#
+# Check all the files in the /captures folder and determine if the provided show
+# is already recording or not.
+def already_recording(sch):
+	# Load all current captures
+	for c in common.full_path_list("capture"):
+		cobj = common.read_config(c)
+		# If the channel is the same, then the capture is already going on
+		if cobj["channel"] == sch["channel"]:
+			return True
+
+		# Also check if the UID matches. 
+		if cobj["uid"] == sch["uid"]:
+			return True
+
+	# If not conflicts with the current captures, then return False
+	return False
+		
+
+## Checks if a tuner is available
+#
+# Looks at all the files in the /tuners, compares it to all the files in the
+# /caputres and determines if a tuner is avaiable.  If a tuner is available,
+# this function will return the ID.  If not, it will return None.
+def available_tuner(): 
+	# Check each tuner in the system
+	for t in common.short_path_list("tuners"):
+		# If Tuner number in the /capture/ folder, continue
+		if t in common.short_path_list("capture"):
+			continue
+		
+		# If you make it this far, the tuner is available.
+		return t
+			
+
+	# Otherwise, return None
+	return None
+
+# Lower Priority Check
+#
+# Given the priority, this function will check if there are any current
+# recordings that are recording at a lower priority.  If so, the tuner ID will
+# be returned.  
+def lower_priority_check(priority):
+	# Set the variables to store the lowest priority recording
+	lowest_capture_path = None
+	lowest_priority = 999999
+
+	# Scan through all capture files
+	for c_path in common.full_path_list("capture"):
+		# Read the config
+		cap = common.read_config(c_path)
+		# Get the priority
+		if "priority" in cap:
+			cap["priority"] = int(cap["priority"])
+		else:
+			# If no priority is provided, set it to 0
+			cap["priority"] = 0
+			
+		if cap["priority"] < lowest_priority:
+			lowest_priority = cap["priority"]
+			lowest_capture_path = c_path
+
+
+	# After scanning all ongoing captures, check if the provided priority is
+	# higher than the lowest capture priority
+	if priority > lowest_priority:
+		# Make sure a valid capture path was found
+		if lowest_capture_path == None:
+			return None
+			
+		# Break off the tuner id (capture file name) and return it
+		return lowest_capture_path.split("/")[-1]
+
+	return None
+
+# Cancel Recording
+#
+# Cancel the recording currently going on on the provided tuner number
+def cancel_recording(tuner):
+	if tuner in common.short_path_list("capture"):	
+		os.remove(common.sub_path("capture")+str(tuner))
+
+
+
+## Start a Capture
+#
+# When a capturer is to start, call this function.  It will generate a new file
+# and place it in the capture folder.
+def create_capture_file(tuner,sch):
+	out = {
+		"end_time" : 0,
+		"channel" : 0,
+		"title" : "",
+		"priority" : 0}
+	
+
+	# Generate a unique title for this recording
+	out["title"] = sch["title"]+"-"+str(time.time())
+	# Generate an Endtime (probably wont always be this simple)
+	out["end_time"] = sch["start_time"]+sch["duration"]
+	# Copy channel from match
+	out["channel"] = sch["channel"]
+	# Copy UID (if one exists)
+	if "uid" in sch:
+		out["uid"] = sch["uid"]
+
+	if "priority" in sch:
+		out["priority"] = sch["priority"]
+
+	# Write our capture to the capture folder
+	common.write_config(common.sub_path("capture")+str(tuner),out)
+	print ("Created a capture file for %s"%out["title"])
+
+## Check Schedule
+#
+# Reads every file in the /schedule/ folder; Determines if a /capture/ file
+# should be created (which starts a recording)
+def check_schedule():
+	matches = []
+
+	# Parse every schedule file.  
+	for s in common.full_path_list("schedule"):
+		# Parse the schedule
+		ret = parse_schedule(s)
+		# If the schedule file's timing matches the current conditions,
+		# it will return a dictionary with the recording info.
+		if ret != None:
+			# If not None, add recording info to matches array.
+			matches.append(ret)
+
+	# TODO Sort matches by priority
+	matches.sort(key=lambda x: x["priority"], reverse=True)
+
+	for rec in matches:
+		# Check if this schedule file is already recording
+		if already_recording(rec):
+			continue
+		# Get an available tuner
+		tuner = available_tuner()
+		if tuner == None:
+			# Look if any if any ongoing recording have lower
+			# prority
+			if "priority" not in rec:
+				rec["priority"] = 0
+			tuner = lower_priority_check(int(rec["priority"]))
+			# If no lower priority recording is discovered, you can
+			# break the loop.  This assumes the matches array is
+			# sorted by priority. 
+			if tuner == None:
+				break
+			# A lower priority ongoing recording was found, cancel
+			# it before starting the next recording.
+			cancel_recording(tuner)
+		# Start capture
+		create_capture_file(tuner,rec)
+
+
+if __name__ == "__main__":
+	check_schedule()
+
+
+# vim:tw=80

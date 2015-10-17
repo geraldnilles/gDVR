@@ -96,34 +96,34 @@ Implementation Plans
 0.1
 ---
 
-- Basic functionality.  Be able to record a recuring recording on a certain
++ Basic functionality.  Be able to record a recuring recording on a certain
   time and day every week
-- Simple versions of Capturer and Queuer completed
++ Simple versions of Capturer and Queuer completed
 
 0.2
 ---
 
-- Add Transcoding using ffmpeg
-- Simple version of transcoder that simply look for newly captured files and
-  converts from MPEG2 to H264.
++ Add Transcoding using ffmpeg
++ Simple version of transcoder that simply look for newly captured files and
+  converts the video stream from MPEG2 to H264 and convers the audio to AAC
 
 0.3
 ---
 
-- Add automatic clean-up for old recordings.
-- Implement basic version of the cleaner.
++ Add automatic clean-up for old recordings.
++ Implement basic version of the cleaner.
 
 0.4
 ---
 
-- Add ability to grab listings from Schedules Direct
-- implement basic versions of fetcher and scheduler
++ Add ability to grab listings from Schedules Direct
++ implement basic versions of fetcher and scheduler
 
 1.0
 ---
 
-- First stable release when database file-formats are more-or-less locked
-- Basic Web Server and WebUI for setting recuring recordings and adding
++ First stable release when database file-formats are more-or-less locked
++ Basic Web Server and WebUI for setting recuring recordings and adding
   "MyShows"
 
 AddOn Components

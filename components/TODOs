@@ -1,0 +1,5 @@
+
+
+TODO While files are being edited with VIM, the queuer freaks out because of a
+unicode error.  I am guessing it is seeing the swp file and shitting itself.
+Add error checking for that.

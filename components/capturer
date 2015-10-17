@@ -20,9 +20,8 @@ class Tuner:
 			self.load_tuner_info() 	
 			return
 		# Check if just the ID was provided instead of the path
-		if(os.path.exists(common.database_path+"/tuners/"
-				+tuner_path)):
-			self.path = common.database_path+"/tuners/"
+		if(os.path.exists(common.sub_path("tuners")+tuner_path)):
+			self.path = common.sub_path("tuners")
 			self.path += tuner_path
 			self.load_tuner_info()
 			return
@@ -35,12 +34,10 @@ class Tuner:
 	def load_tuner_info(self):
 		# Load Tuner COnfig file self.path
 		config = common.read_config(self.path)
-		self.device_id = config["device_id"]
-		self.number = config["tuner_number"]
+		self.device_id = config["id"]
+		self.number = config["num"]
 		self.tuner_id = self.path.split("/")[-1]
-		self.capture_file_path = (common.database_path
-					+"/capture/"+self.tuner_id)
-		self.capture_folder_path =common.database_path+"/capture/"
+		self.capture_file_path = common.sub_path("capture")+self.tuner_id
 
 	def run(self):
 		# Main Loop
@@ -54,28 +51,38 @@ class Tuner:
 			time.sleep(10)
 
 	def start(self):
-		print("Attempting to start a recording")
-		# If Capture doesnt exist, exit
+		#print("Attempting to start a recording")
+		# If Capture file doesnt exist, exit
 		if(not os.path.exists(self.capture_file_path)):
-			print("No Jobs, Exit")
+			#print("No Jobs, Exit")
 			return False
 		# Read Capture File
 		config = common.read_config(self.capture_file_path)
 		self.title = config["title"]
 		# TODO parse other types of time format
-		self.endtime = int(config["endtime"])
+		if "end_time" in config:	
+			self.end_time = float(config["end_time"])
+		#elif "duration" in config:
+		#	self.end_time = common.duration2endtime(config["duration"])
+		else:
+			print("End time or duraiton not provided")
+			# This will certainly result in a deleted config file
+			self.end_time = 0
 		self.channel = config["channel"]
-		# If time has already past, return immediately
-		if self.endtime < time.time():
+		# If time has already past, delete it and return
+		if self.end_time < time.time():
 			print("Recording is too old")
 			os.remove(self.capture_file_path)
 			return
+
+		# Recording is good to go, start!
 		# Change Channel
 		self.set_channel()
 		# Start the capture process	
 		self.capture()
 	
 	def set_channel(self):
+		# TODO Loop back and make sure the channel was set correctly
 		subprocess.call(["hdhomerun_config",self.device_id,"set",
 				"/tuner%s/vchannel"%self.number,
 				self.channel])
@@ -87,21 +94,22 @@ class Tuner:
 				self.device_id,
 				"save",
 				self.number,
-				self.capture_folder_path+self.title+".mpeg"],
+				common.sub_path("recordings")
+					+self.title+".rec.mpeg"],
 				# Ignore all crap printed by this app
 				#stdout = subprocess.DEVNULL,
 				#stderr = subprocess.DEVNULL
 				)
 		while (1):
 			# If Time is up, stop the recording
-			if(time.time() > self.endtime):
+			if(time.time() > self.end_time):
 				print("The Recording is finished")
 				os.remove(self.capture_file_path)
 				break
 			# If someone deletes the capture file, stop the 
 			# recording
 			if(not os.path.exists(self.capture_file_path)):
-				print("The Recording was stopped by the user")
+				print("The Recording was stopped manually")
 				break
 			# if process stopped on its own, break
 			if p.poll() != None:
@@ -112,17 +120,24 @@ class Tuner:
 
 			time.sleep(10)
 			print("Recording In Progress. %d seconds left"%(
-				int(self.endtime - time.time())))
+				int(self.end_time - time.time())))
 		# Terminate the process
 		p.terminate()
 		# Wait for it to close
 		p.wait()
-		# Deleate the Capture File to signify that we are done
+
+		#  do i try to restart the file if the capture ends prematurely?
+		#if(os.path.exists(self.capture_file_path)):
+		#	os.remove(self.capture_file_path)
 		
+		# Remove the .rec. tag from the file name to signify that the
+		# recording is not in progress
+		os.rename( common.sub_path("recordings")+self.title+".rec.mpeg",
+			common.sub_path("recordings")+self.title+".mpeg")
 		
 if __name__ == "__main__":
 	if len(sys.argv) < 2:
-		print ("You need to specify a tuner file to start the process")
+		print ("You need to specify a tuner file or ID to start the process")
 		print (usage)
 		exit()
 
