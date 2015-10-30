@@ -47,5 +47,14 @@ LIRC WebUI
 Until my JSON proxy is up and running, i'll create a simple webUI to send basic
 commands (Volume, Power, Sleep Timer?)
 
+A single Python script (lirc_webui.py) can be transfered to the OpenElec storage
+voltage as is and run.  To make the server run automatically, you can put it in
+the /storage/.config/autostart.sh folder.  Make sure to add a '&' so that it
+runs in the background.  I also included my autostart script.
+
+This folder also contains the Samsung LIRC config file for my TV.  I had to find
+one with volume, power, and sleep.   Place this in the .config folder overrides
+the default lirc configuration.
+
 
 .. vim:tw=80
