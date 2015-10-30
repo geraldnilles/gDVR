@@ -1,0 +1,39 @@
+#!/usr/bin/env python
+
+import common
+import time
+import os.path
+
+def remove_stale_recordings():
+
+	# Shelf_life in seconds
+	# 10 days * 24h/day * 60min/hr * 60s/min
+	shelf_life = 10*24*60*60
+	exiration = time.time()-shelf_life
+
+	for rec in common.full_path_list("recordings"):
+		# See if file is locked
+		if ".lock." in rec:
+			continue
+
+		# Get Creation Timestamp
+		creation_time = os.path.getmtime(rec)
+		if creation_time < exiration:
+	
+			os.remove(rec)
+
+			print("%s was removed because its old"%(rec))
+
+		
+def remove_crowded_recordings():
+	pass
+
+	# Check every schedule file and look for "keep" 
+		# Count the number of recordings for this scheudle
+		# If number of files > sch["keep"], delete the oldest files 
+
+if __name__ == "__main__":
+	
+	remove_stale_recordings()
+	
+	remove_crowded_recordings()

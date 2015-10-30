@@ -35,8 +35,19 @@ class Transcoder:
 				# Specify Input File
 				"-i",self.infile, 
 				"-map", "0", # Transcode All Audio tracks
-				# Scale to DVD Quality and apply deinterlacin
-				"-vf", "yadif,scale=trunc(oh*a/2)*2:480", 
+				# Normalizes audio volume chunk by chunk
+				"-af", "dynaudnorm",
+				# Scale to DVD Quality and apply deinterlacing
+				# Using the trunc() makes sure the x axis is an
+				# even number.  This makes the x264 compression
+				# better
+				#"-vf", "yadif,scale=trunc(oh*a/2)*2:480", 
+				# In order:
+				# 	Deinterlaces the input
+				# 	Scales to 720p 
+				# 	Denoises the input (improve compression)
+				# TODO Verify that SD streams are not upscaled
+				"-vf", "yadif,scale=trunc(oh*a/2)*2:720,hqdn3d", 
 				# Use h264 codec
 				"-c:v", "libx264",
 				# Use high computation encoding 
@@ -45,6 +56,10 @@ class Transcoder:
 				"-crf", "20",
 				# Reduce sound to stereo 
 				"-ac", "2", 
+				# Increse the Center mix level to dialog volume is loud
+				# Since we are doing dynamic ranging, this
+				# doesnt matter
+				# "-center_mixlev","1",
 				"-c:a", "libfdk_aac",
 				"-y", # Overwrite all files automatically
 				self.outfile],

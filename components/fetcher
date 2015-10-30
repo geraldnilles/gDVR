@@ -1,21 +1,43 @@
 #!/usr/bin/env python
 
-'''
-=========
- Fetcher
-=========
+# =========
+#  Fetcher
+# =========
 
-The fetcher will grab data from the Schedules Direct database and populate it
-in the local database folder(s).  The database will consit of 2 folders, a
-channel folder and an episode folder.  The channel folder will contain 1 file
-for each channel.  The file will contain a schedule for that channel.  It will
-probably be easier just to use the JSON format used by Schedules Direct.  The
-Episode folder will contain a file for each episode contained in the schedules
-with specifics about the show title, episode title, season, actors, etc..
+# The fetcher will grab data from the Schedules Direct database and populate it
+# in the local database folder(s).  The database will consit of 2 folders, a
+# channel folder and an episode folder.  The channel folder will contain 1 file
+# for each channel.  The file will contain a schedule for that channel.  It
+# will probably be easier just to use the JSON format used by Schedules Direct.
+# The Episode folder will contain a file for each episode contained in the
+# schedules with specifics about the show title, episode title, season, actors,
+# etc..
 
-This code is not final.   it will not be fully implemented until Version 0.5
+# This code is not final.   it will not be fully implemented until Version 0.5
 
-'''
+SD_URL_BASE = "https://json.schedulesdirect.org/20141201"
+
+def sd_login(username,password):
+
+	hashed_password = hashlib.sha1(password).hexdigest()
+
+	req = {
+		"username":username, 
+		"password":hashed_password
+		}
+
+	resp = sd_http("/token",req)
+
+	if resp["message"] == "OK":
+		return resp["token"]
+	else:
+		print("Login Failed")
+		
+
+def sd_http(url,post):
+	pass
+
+
 
 def fetch_stationID_list():
 	pass
@@ -29,4 +51,4 @@ def fetch_programID_list():
 def fetch_program_info():
 	pass
 
-
+# vim:tw=80
