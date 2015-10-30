@@ -41,6 +41,11 @@ always be passed back verbatim to the host.
 If th url is /jsonrpc, the data will be parsed and check if a volume or power
 command was sent.  If so, it will not pass it locally and run an irsend command. 
 
+LIRC WebUI
+==========
+
+Until my JSON proxy is up and running, i'll create a simple webUI to send basic
+commands (Volume, Power, Sleep Timer?)
 
 
 .. vim:tw=80
