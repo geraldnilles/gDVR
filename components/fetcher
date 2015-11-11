@@ -15,40 +15,266 @@
 
 # This code is not final.   it will not be fully implemented until Version 0.5
 
-SD_URL_BASE = "https://json.schedulesdirect.org/20141201"
+import http.client
+import json
+import hashlib
+import common
+import time
+import os
+import gzip
 
-def sd_login(username,password):
+def sd_login():
 
-	hashed_password = hashlib.sha1(password).hexdigest()
+	sys_conf = common.read_system_conf()
+	if "sd_token_path" in sys_conf:
+		TOKEN_FILE = sys_conf["sd_token_path"]
+	else:
+		TOKEN_FILE = "/tmp/sd_token"
+
+	if (os.path.exists(TOKEN_FILE)):
+		# Get Date of last modification
+		mt = os.path.getmtime(TOKEN_FILE)
+		# If newer than 12 hours old, read the token and return
+		if mt+(12*60*60) > time.time():
+			f = open(TOKEN_FILE)
+			token = f.read()
+			f.close()
+			return token
+
+	# Read credentials from /etc/ file
+	if "sd_username" in sys_conf and "sd_password" in sys_conf:
+		username = sys_conf["sd_username"]
+		password = sys_conf["sd_password"]
+	else:
+		print("Username and Password not specified in sys config")
+		return None
+
+	hashed_password = hashlib.sha1(bytes(password,"utf-8")).hexdigest()
 
 	req = {
 		"username":username, 
 		"password":hashed_password
 		}
 
-	resp = sd_http("/token",req)
-
+	resp = sd_http("/token",data=req)
+	print (resp)
 	if resp["message"] == "OK":
+		# Cache Token in tmp file
+		f = open(TOKEN_FILE,"w")
+		f.write(resp["token"])
+		f.close()
 		return resp["token"]
 	else:
 		print("Login Failed")
 		
 
-def sd_http(url,post):
-	pass
+def sd_http(url,headers={},data=None,method=None):
+
+	data_str = ""
+
+	if method == None:
+		# If data is none, assume  it is a GET method
+		if data == None:
+			method = "GET"
+		else:
+			method = "POST"
+	
+	if method == "POST":
+		data_str = json.dumps(data)
+
+	if method == "GET":
+		# If data was provided and method was GET, append to the URL
+		url += "?"
+		if data != None:
+			for key in data:
+				# TODO URL encode these
+				url+= key+"="+str(data[key])+"&"
+			
+
+	# Add deflate to header
+	headers["Accept-Encoding"] = "deflate,gzip"
+
+	conn = http.client.HTTPSConnection("json.schedulesdirect.org",timeout=30)
+	conn.request(method,"/20141201"+url,data_str,headers)
+	response = conn.getresponse()
+
+	data = response.read()
+	if response.getheader("Content-Encoding") == "gzip":
+		data = gzip.decompress(data)
+
+	return json.loads(data.decode("utf-8"))
+	
+
+
+# Get a list of lineups that the current SD user is signed up for.
+def fetch_channel_lineup():
+	
+	headers = {"token":sd_login()}
+
+	resp = sd_http("/lineups",headers=headers)
+
+	if "lineups" not in resp:
+		print ("Error getting lineup",resp)
+
+	return resp["lineups"]
+
+# Find a list of lineups that apply to the provided country and zipcode.  It
+# returns a dictionary containing all of the matching lineups
+def find_lineups(country,zipcode):
+
+	headers = {"token":sd_login()}
+
+	data = {
+		"country":country,
+		"postalcode":zipcode
+		}
+
+	resp = sd_http("/headends",headers,data,"GET")
+
+	return resp
+
+# Add a line up to the account provided the lineup code.  This code can be
+# discovered by using the find_lineups() function.
+def add_lineup(lineup_code):
+	
+	headers = {"token":sd_login()}
+
+	resp = sd_http("/lineups/"+lineup_code,headers=headers,method="PUT")
+
+	print (resp)
+	return resp
+
+
+# Get a list of station IDs on the given channel lineup.  This allows yoo to map
+# station IDs to channel numbers
+def fetch_stationID_list(lineup):
+
+	headers = {"token":sd_login()}
+
+	resp = sd_http("/lineups/"+lineup,headers=headers)
+	return resp
+
+# Fetch info about the program.  This has the title, the program title, the
+# episode title, and a list of actors/writers/directors.
+def fetch_program_info(programIDs):
+	headers = {"token":sd_login()}
+	#If 1 programID was provided, convert it to a list
+	if type(programIDs) == str:
+		programIDs = [programIDs]
+
+	resp = sd_http("/programs",headers=headers,data=programIDs,method="POST")
+	return resp
+
+# Fetch info about the station's schedule.  This generate a list of programs on
+# the station.  Each entry has the ProgramID, airdate (in iso format), duration,
+# whether or not it's new.
+def fetch_station_schedule(stationIDs,days):
+
+	headers = {"token":sd_login()}
+
+	d = [	time.strftime("%Y-%m-%d",time.localtime(time.time())),
+		time.strftime("%Y-%m-%d",time.localtime(time.time()+days*24*60*60))
+		]
+
+	print (d)
+
+	if len(stationIDs) >= 5000:
+		stationIDs = stationIDs[:4999]
+
+	req = []
+	for s in stationIDs:
+		s_obj = {
+			"stationID":s,
+			"date": d
+		}
+		req.append(s_obj)
+
+	resp = sd_http("/schedules",headers=headers,data=req,method="POST")
+
+	return resp
+
+
+def download_recent_schedule():
+	# Login to SD
+	# Get the first lineup for the current user
+	lineup = fetch_channel_lineup()[0]["lineup"]
+	# Get a list of stations on the current lineup
+	station_obj = fetch_stationID_list(lineup)["map"]
+	station_list = []
+	for s in station_obj:
+		station_list.append(s["stationID"])
+	
+	# Download schedule for all stations for next 2 days	
+	resp = fetch_station_schedule(station_list,1)
+
+	for s in resp:	
+		f = open(common.sub_path("channels")+s["stationID"],"w")
+		f.write(json.dumps(s))
+		f.close()
+
+
+def check_program_hash(programID,md5):
+	path = common.sub_path("episodes")+programID
+	if os.path.exists(path):
+		f = open(path,"r")
+		obj = json.load(f)
+		f.close()
+		# If md5 Hash matches the proided one, return False
+		if obj["md5"] == md5:
+			print ("%s is up to date"%programID)
+			return False 
+
+		print ("%s needs updating"%programID)
+
+	else:
+		print ("%s is new"%programID)
+
+	# Return True to show that		
+	return True
+
+
+def download_episode_info():
+	# Get a list of channels
+	channels = common.full_path_list("channels")
+
+	for c_fn in channels:
+		f = open(c_fn,"r")
+		c = json.load(f)
+		f.close()
+
+		programIDs = []		
+
+		for p in c["programs"]:
+			# Check if program info needs to be downloaded
+			if check_program_hash(p["programID"],p["md5"]):
+				programIDs.append(p["programID"])
 
 
 
-def fetch_stationID_list():
-	pass
+		# Fetch a list of programs
+		print ("Downloading",programIDs)
+		programs = fetch_program_info(programIDs)
+		# Write each program to the episodes folder
+		for p in programs:
+			print ("writing %s to disk"%p["programID"])
+			f = open(common.sub_path("episodes")+p["programID"],"w")
+			json.dump(p,f)
+			f.close()
+		
+	
+#lineups = fetch_channel_lineup()
 
-def fetch_station_schedule():
-	pass
+#stationIDs = fetch_stationID_list(lineups[0]["lineup"])
+#for s in stationIDs["map"]:
+#	print (s)
 
-def fetch_programID_list():
-	pass
+#download_recent_schedule()
 
-def fetch_program_info():
-	pass
+download_episode_info()
+
+#sch = fetch_station_schedule([stationIDs["map"][0]["stationID"]],1)
+
+#print (sch)
+
 
 # vim:tw=80

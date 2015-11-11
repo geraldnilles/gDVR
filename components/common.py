@@ -3,6 +3,7 @@
 import configparser
 import os
 
+config_path = "/etc/gdvr.conf"
 database_path = "~/.gDVR"
 
 required_subfolders = ["recordings", # Final Output folder of the DVR
@@ -108,12 +109,19 @@ def check_database():
 			if f == "tuners":
 				init_tuners()
 
-config_path = "/etc/gdvr.conf"
+def read_system_conf():
 
-# Initialize the database if needed
-if os.path.exists(config_path):
-	# Read the configured path from the file
-	x = read_config(config_path)
+	# TODO Check if there is one in the home directory
+	if os.path.exists(config_path):
+		x = read_config(config_path)
+		return x
+	else:
+		return None
+
+x = read_system_conf()
+
+if x != None:
+
 	database_path = x["database_path"]
 
 # We probably want to find a better way to decide when to check the database

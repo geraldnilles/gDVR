@@ -48,6 +48,7 @@ class Transcoder:
 				# 	Denoises the input (improve compression)
 				# TODO Verify that SD streams are not upscaled
 				"-vf", "yadif,scale=trunc(oh*a/2)*2:720,hqdn3d", 
+				"-ignore_unknown",
 				# Use h264 codec
 				"-c:v", "libx264",
 				# Use high computation encoding 
@@ -62,9 +63,10 @@ class Transcoder:
 				# "-center_mixlev","1",
 				"-c:a", "libfdk_aac",
 				"-y", # Overwrite all files automatically
-				self.outfile],
-				stdout = subprocess.DEVNULL,
-				stderr = subprocess.DEVNULL
+				self.outfile]
+				# Surpress all output
+				#stdout = subprocess.DEVNULL,
+				#stderr = subprocess.DEVNULL
 				)
 
 		print ("Transcoding of %s started"%self.infile)	
@@ -111,11 +113,15 @@ class Transcoder:
 			# Transcoding in progress
 			return True
 		else:
-			# TODO Analayze return code and dont delete 
 			print("Transcoding of %s finished with code %d"
 				%(self.infile,retcode))	
-			# TODO Move MP4 to a different folder
-			os.remove(self.infile)
+			# If something went wrong, rename the input file as a
+			# failure so it can be analysed and it will stop trying
+			# to transcode
+			if retcode != 0:
+				os.rename(self.infile,self.infile+".failed")
+			else:
+				os.remove(self.infile)
 
 			# Clear out the transcoder
 			self.reset()
