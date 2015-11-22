@@ -22,6 +22,43 @@ import common
 import time
 import os
 import gzip
+import subprocess
+import re
+
+
+# Download a whitelist based on the channels discovered by the tuner.  The
+# HDHomerun prime automatically scans the channels and figures out which are
+# part of the subscription by marking them with a DRM flag.  This generates a
+# whitelist that can be manually edited by changing the /channels/whitelist file
+def download_tuner_whitelist():
+	# Discover Tuner IP Address
+	output = subprocess.check_output(["hdhomerun_config","discover"])
+	m = re.search("\d*\.\d*\.\d*\.\d*",output.decode("utf-8"))
+	tuner_ip = m.group(0)
+	print (tuner_ip)
+
+	# Download
+	conn = http.client.HTTPConnection(tuner_ip,timeout=30)
+	conn.request("GET","/lineup.json")
+	response = conn.getresponse()
+
+	data = response.read()
+
+	lineup = json.loads(data.decode("utf-8"))
+
+	output = ""
+
+	for channel in lineup:
+		if "DRM" in channel:
+			continue
+		output += channel["GuideNumber"]
+		output += ":"
+		output += channel["GuideName"]
+		output += "\n"
+
+	f = open(common.sub_path("channels")+"whitelist","w")
+	f.write(output)
+	f.close()
 
 def sd_login():
 
@@ -118,6 +155,8 @@ def fetch_channel_lineup():
 
 	return resp["lineups"]
 
+	
+
 # Find a list of lineups that apply to the provided country and zipcode.  It
 # returns a dictionary containing all of the matching lineups
 def find_lineups(country,zipcode):
@@ -193,6 +232,14 @@ def fetch_station_schedule(stationIDs,days):
 
 	return resp
 
+def download_channel_lineup():
+
+	lineups = fetch_channel_lineup()
+	stationIDs = fetch_stationID_list(lineups[0]["lineup"])
+
+	f = open(common.sub_path("channels")+"map","w")
+	f.write(json.dumps(stationIDs))
+	f.close()
 
 def download_recent_schedule():
 	# Login to SD
@@ -221,7 +268,6 @@ def check_program_hash(programID,md5):
 		f.close()
 		# If md5 Hash matches the proided one, return False
 		if obj["md5"] == md5:
-			print ("%s is up to date"%programID)
 			return False 
 
 		print ("%s needs updating"%programID)
@@ -252,7 +298,6 @@ def download_episode_info():
 
 
 		# Fetch a list of programs
-		print ("Downloading",programIDs)
 		programs = fetch_program_info(programIDs)
 		# Write each program to the episodes folder
 		for p in programs:
@@ -260,6 +305,12 @@ def download_episode_info():
 			f = open(common.sub_path("episodes")+p["programID"],"w")
 			json.dump(p,f)
 			f.close()
+
+def cleanup():
+
+	pass
+	# Read through the episodes folder and delete anything that is older
+	# than a week
 		
 	
 #lineups = fetch_channel_lineup()
@@ -270,7 +321,12 @@ def download_episode_info():
 
 #download_recent_schedule()
 
-download_episode_info()
+#download_episode_info()
+
+download_tuner_whitelist()
+
+#download_channel_lineup()
+
 
 #sch = fetch_station_schedule([stationIDs["map"][0]["stationID"]],1)
 
