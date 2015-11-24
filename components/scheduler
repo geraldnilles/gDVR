@@ -35,6 +35,40 @@ def test_title_match(substr):
 				print("Unicode error")
 
 
+def read_whitelist():
+	pass
+
+# Look up the station ID based on the virtual channel number by reading the
+# /channel/map file
+def lookup_stationID(channel):
+	pass
+
+# Read the stationID file in the /schedules directory, load the jSON object and
+# return
+def get_station_schedule(stationID):
+	pass
+
+# Determine if there are any subscrptions that match the given event
+def is_subscribed_to(event):
+	pass
+
+# Create a schedule file for the provided event.  It will also verify that the
+# a schedule wasnt created already
+def schedule_event(event,channel):
+	pass
+
+def schedule_recordings():
+
+	for channel in read_whitelist():
+		stationID = lookup_stationID(channel)
+		schedule = get_station_schedule(stationID)
+		for event in schedule:
+			if is_subscribed_to(event):
+				schedule_event(event)
+			
+		
+		
+
 test_title_match("Modern")
 
 
