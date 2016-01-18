@@ -395,9 +395,22 @@ function playHandler(req,resp){
 	resp.end();
 }
 
+function commandHandler(req,resp){
+	var command = url.parse(req.url,true)["query"]["c"];
+	console.log("Command! ",command);
+	resp.writeHead(200,{"Content-Type":"text/plain"});
+	if(command == "Stop"){
+		stop(null,null,function(){});
+	}
+	resp.write("OK");
+	resp.end();
+}
+
 function httpHandler(req,resp){
 	if (req.url.search("play") > 0) {
 		playHandler(req,resp);
+	} else if (req.url.search("command") > 0) {
+		commandHandler(req,resp);
 	}else if (req.url.search("frontend.js") > 0) {
 		fileHandler("frontend.js",req,resp);
 	}else if (req.url.search("html") > 0){
