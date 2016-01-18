@@ -3,12 +3,25 @@ dgram = require("dgram");
 fs = require("fs");
 path = require("path");
 http = require("http");
+exec = require("child_process").exec;
+url = require("url");
+qs = require("querystring");
 
-kodi_addrs = [];
+var kodis = ["BedroomRPi"];
+
 
 // List of episodes which have been watched
 watched = [];
 
+// Assume the TV is off when the server is started
+var tvIsOn = false;
+var unixSocketPath = "/tmp/kodi.socket"
+
+
+// Discovery Kodi Addresses
+//
+// Performs a UDP broadcast to search for kodi instances running on the local
+// network.
 function discover_kodi_addrs(){
 
 	// Send a discovery message to all devices on the local network 
@@ -16,7 +29,7 @@ function discover_kodi_addrs(){
 	client.bind(9090,function(){
 		client.setBroadcast(true);
 
-		msg="GDVR_KODI_DISCOVERY_REQUEST";
+		var msg="GDVR_KODI_DISCOVERY_REQUEST";
 		client.send(msg,0,msg.length,9090,"192.168.0.255");
 
 		// Close this socket 1s after the requesting 
@@ -26,7 +39,7 @@ function discover_kodi_addrs(){
 	// Receive responses from discovery message
 	client.on("message",function(msg,rinfo){
 
-		resp = msg.toString();
+		var resp = msg.toString();
 		console.log(resp);
 
 		if (resp == "GDVR_KODI_DISCOVERY_RESPONSE"){
@@ -46,9 +59,24 @@ function discover_kodi_addrs(){
 // Eventually when i get JSON notifications working, this can be done
 // asyncronously without polling.
 function update_status(kodi){
-	// Talk to Kodi's address and check it's status
-	// if Kodi's TV is on and playback is stopped, turn the TV off
-	// If Kodi's TV is off and playback is going on, turn the TV On
+	// CHeck if there is an active player
+	get_playerids(null,function(pids){
+		// If there are PIDs, a player is active
+		if(pids.length > 0){
+			if(!tvIsOn){
+				// TV off but video is playing, turn on TV
+				power(null);
+				tvIsOn = true;
+			}
+		// If there are no PIDs, there are no shows playing
+		}else{
+			if(tvIsOn){
+				// TV is on but video is done, Turn off TV
+				power(null);
+				tvIsOn = false;
+			}		
+		}
+	});
 }
 
 function kodi_request(msg,callback){
@@ -57,13 +85,12 @@ function kodi_request(msg,callback){
 	var options = {
 		hostname: "BedroomRPi",
 		port: 80,
-		path: "/jsonrpc?request="+JSON.stringify(msg),
+		path: "/jsonrpc?request="+qs.escape(JSON.stringify(msg)),
 		method: "GET",
 		headers:{
 			'Content-Type': 'application/json'
 		}
 	}
-
 	var req = http.request(options,function(res){
 		res.setEncoding('utf8');
 		res.on('data',function(chunk){
@@ -77,10 +104,34 @@ function kodi_request(msg,callback){
 }
 
 // Clear Kodi's playlist
-function clear_playlist(kodi){
+function clear_playlist(kodi,callback){
 	get_playlistid(kodi,function(pid){
 		//Msg
-		msg = {
+		var msg = {
+			jsonrpc: "2.0",
+			id: 1,
+			//method: "Playlist.GetItems",
+			method: "Playlist.Clear",
+			params: {
+				playlistid:pid
+			}
+		}
+
+		
+
+		kodi_request(msg,function(resp){
+			callback();
+		});
+
+
+	});
+}
+
+// Clear Kodi's playlist
+function list_playlist(kodi,callback){
+	get_playlistid(kodi,function(pid){
+		//Msg
+		var msg = {
 			jsonrpc: "2.0",
 			id: 1,
 			method: "Playlist.GetItems",
@@ -93,7 +144,7 @@ function clear_playlist(kodi){
 		
 
 		kodi_request(msg,function(resp){
-			;
+			callback();
 		});
 
 
@@ -114,7 +165,6 @@ function get_playlistid(kodi,callback){
 				pid = playlists[i]["playlistid"];
 			}
 		}
-		console.log("PID Found: "+pid);
 		callback(pid);
 	});
 }
@@ -136,18 +186,20 @@ function add_to_playlist(kodi,paths,pid,callback){
 	if(pid == null){
 
 		get_playlistid(kodi,function(pid){
-			add_to_playlist(kodi,paths,pid);
+			add_to_playlist(kodi,paths,pid,callback);
 		});
 	} else {
+		// End of Recursion.  No more items to add to playlist
 		if(paths.length == 0){
 			// Return
 			callback();
+			return;
 		}
 
 		// Remove the first item from the array
-		var item = paths.shift()
+		var item = paths.shift();
 		//Msg
-		msg = {
+		var msg = {
 			jsonrpc: "2.0",
 			id: 1,
 			method: "Playlist.Add",
@@ -158,19 +210,73 @@ function add_to_playlist(kodi,paths,pid,callback){
 		}
 		// Call the same function again with the reduced arr
 		kodi_request(msg,function(resp){
-			add_to_playlist(kodi,paths,pid);
+			add_to_playlist(kodi,paths,pid,callback);
 		});
 
 
+	}
+}
+
+function play(kodi,pid,callback){
+	if(pid == null){
+		get_playlistid(kodi,function(pid){
+			play(kodi,pid,callback);
+		});
+	} else {
+		
+		var msg = {
+				jsonrpc: "2.0",
+				id: 1,
+				method: "Player.Open",
+				params: {
+					item: {
+						playlistid:pid
+					}
+				}
+		}
+
+		kodi_request(msg,function(resp){
+			callback();
+		});	
+	}
+}
+
+function get_playerids(kodi,callback){
+	var msg = {
+		jsonrpc: "2.0",
+		id: 1,
+		method: "Player.GetActivePlayers"
+	}
+	kodi_request(msg,function(resp){
+		var players = resp["result"];
+		callback(players);
 	});
 }
 
-function play(kodi,callback){
+function stop(kodi,pids,callback){
+	if(pids == null){
+		get_playerids(kodi,function(p){
+			stop(kodi,p,callback);
+		});
+	}else{
+		if(pids.length == 0){
+			callback();
+			return;
+		}
 
-}
-
-function stop(kodi,callback){
-
+		var item = pids.shift();
+		var msg = {
+			jsonrpc: "2.0",
+			id: 1,
+			method: "Player.Stop",
+			params: {
+				playerid:item["playerid"]
+			}
+		}
+		kodi_request(msg,function(resp){
+			stop(kodi,pids,callback);
+		});
+	}	
 }
 
 function display_status(kodi){
@@ -186,13 +292,20 @@ function vol_dow(kodi) {
 }
 
 function power(kodi){
-	lirc_send(kodi,"BTN_PWR");
+	lirc_send(kodi,"BTN_POWER");
+	console.log("Toggling TV Power");
 }
 
 function lirc_send(kodi,command){
 	// Use SSH to send and LIRC command on the kodi box
-	exec("ssh root@"+kodi.address+" irsend -d /run/lirc/lircd-lirc0 SEND_ONCE samsung "+command,function(){
+	exec("ssh root@BedroomRPi"
+		+" \"irsend -d /run/lirc/lircd-lirc0 SEND_ONCE samsung "
+		+command+"\"",function(err,stdout,stderr){
 		// Check output and make sure everything went well
+		if(stdout.length > 0 || stderr.length > 0){
+			console.log(stdout);
+			console.log(stderr);
+		}
 	});
 }
 
@@ -200,7 +313,7 @@ function lirc_send(kodi,command){
 
 // Return a list of TV shows that match the query string
 function findShows(query,callback){
-	var tvPath = "/mnt/raid/TV";
+	var tvPath = "/src/nfs4/media/TV";
 
 	fs.readdir(tvPath,function(err,files){
 		var out = [];
@@ -218,31 +331,99 @@ function findShows(query,callback){
 // Generate Random Playlist
 function generatePlaylist(showPath,numOfEpisodes,callback){
 	fs.readdir(showPath,function(err,files){
+		// Figure out the maximum starting point of the playlist
 		var max = files.length-numOfEpisodes;
+		// If less than 0, play every episode
 		if(max <= 0){
 			var i = 0;
 			var end = files.length;
+		// Otherwise, find a randome starting point
 		} else {
 			var i = Math.floor(Math.random()*max);
 			var end = i+numOfEpisodes;
 		}
-
-		console.log(i,end);
 
 		var out = [];
 		for (; i < end; i++){
 			if(files[i][0] == "."){
 				continue
 			}
-			out.push(path.join(showPath,files[i]))
+			out.push("nfs://server"+path.join(showPath,files[i]))
 		}	
 		callback(out);
 	});
 }
 
 // Test Secion
-add_to_playlist(1,1)
-clear_playlist(0)
+// Clear the playlist and add 3 episodes to the Queue
+
+function play_show(show,num){
+
+	stop(null,null,function(){
+		clear_playlist(null,function(){
+			generatePlaylist("/srv/nfs4/media/TV/"+show,num,function(paths){
+				add_to_playlist(null,paths,null,function(){
+					list_playlist(null,function(){
+						play(null,null,function(){
+							update_status(null);
+						});
+					});
+				});
+			});
+		});
+	});
+}
+
+function fileHandler(name,req,resp){
+	fs.readFile(name,"utf8",function(err,data){
+		if(name.search("html")>0){
+			resp.writeHead(200, {"Content-Type":"text/html"});
+		}else{
+			resp.writeHead(200, {"Content-Type":"text/plain"});
+		}
+		resp.write(data);
+		resp.end();
+	});
+}
+
+function playHandler(req,resp){
+	var show = url.parse(req.url,true)["query"]["s"];	
+	console.log("Play! ",show);
+	resp.writeHead(200,{"Content-Type":"text/plain"});
+	play_show(show,5);
+	resp.write("OK");
+	resp.end();
+}
+
+function httpHandler(req,resp){
+	if (req.url.search("play") > 0) {
+		playHandler(req,resp);
+	}else if (req.url.search("frontend.js") > 0) {
+		fileHandler("frontend.js",req,resp);
+	}else if (req.url.search("html") > 0){
+		fileHandler("frontend.html",req,resp);
+	}else{
+		resp.writeHead(404,{"Content-Type":"text/plain"});
+		resp.end();
+	}
+}
+
+function setup_server(){
+	var server = http.createServer(httpHandler);
+
+	if(fs.existsSync(unixSocketPath)){
+		fs.unlink(unixSocketPath);
+	}
+
+	server.listen(unixSocketPath);
+
+	fs.chmodSync(unixSocketPath,"777");
+	console.log("Server Started");
+}
+
+setup_server();
+// Setup Kodi Update Heartbeat Check
+setInterval(update_status,30000,null);
 
 
 // vim:tw=80

@@ -16,7 +16,7 @@ function play(show){
 	var xhttp = new XMLHttpRequest();
 	xhttp.onreadystatechange=function(){
 		var state = xhttp.readyState;
-		var sts = xhttp.sts;
+		var sts = xhttp.status;
 
 		if(state == 4 && sts == 200){
 			debug("Success! Set a playlist for "+show);	

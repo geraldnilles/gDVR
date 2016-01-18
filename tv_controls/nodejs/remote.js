@@ -30,7 +30,7 @@ function raidHandler(req,resp){
 		if(data.search("\[U+\]") > 0){
 			resp.end("\n\nOK");
 		} else {
-			resp.wnd("\n\nBAD");
+			resp.end("\n\nBAD");
 		}
 	});
 	resp.write("Raid Status: \n");	
