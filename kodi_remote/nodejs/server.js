@@ -284,11 +284,11 @@ function display_status(kodi){
 }
 
 function vol_up(kodi){
-	lirc_send(kodi,"KEY_VOLUP");
+	lirc_send(kodi,"KEY_VOLUMEUP");
 }
 
-function vol_dow(kodi) {
-	lirc_send(kodi,"KEY_VOLDOWN");
+function vol_down(kodi) {
+	lirc_send(kodi,"KEY_VOLUMEDOWN");
 }
 
 function power(kodi){
@@ -401,6 +401,12 @@ function commandHandler(req,resp){
 	resp.writeHead(200,{"Content-Type":"text/plain"});
 	if(command == "Stop"){
 		stop(null,null,function(){});
+	}else if(command == "Volume Up"){
+		vol_up(null);
+	}else if(command == "Volume Down"){
+		vol_down(null);
+	}else{
+		console.log("Unknown Command");
 	}
 	resp.write("OK");
 	resp.end();
