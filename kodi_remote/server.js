@@ -79,6 +79,11 @@ function update_status(kodi){
 	});
 }
 
+// Kodi Message Request
+//
+// This function will send HTTP commands to a kodi device.  for now, is
+// hardwired to BedroomRPi, but it will eventaully be configurable to any IP
+// address.
 function kodi_request(msg,callback){
 	console.log(JSON.stringify(msg));
 
@@ -97,6 +102,16 @@ function kodi_request(msg,callback){
 			console.log(chunk);
 			callback(JSON.parse(chunk));
 		});
+	
+	});
+
+	req.on('error',function(e){
+		console.log("Error Talking to Kodi", options["hostname"],
+				e.message);
+	});
+
+	req.setTimeout(20000,function(e){
+		console.log("Request Timeout");
 	});
 
 	req.end();
